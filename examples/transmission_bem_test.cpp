@@ -30,18 +30,18 @@ int main() {
   parametricbem2d::ParametrizedLine ib(SE, SW); // bottom
 
   // Outer square vertices
-  Eigen::Vector2d NEo(3, 3);
-  Eigen::Vector2d NWo(-3, 3);
-  Eigen::Vector2d SEo(3, -3);
-  Eigen::Vector2d SWo(-3, -3);
+  Eigen::Vector2d NEo(1.1, 1.1);
+  Eigen::Vector2d NWo(-1.1, 1.1);
+  Eigen::Vector2d SEo(1.1, -1.1);
+  Eigen::Vector2d SWo(-1.1, -1.1);
   // Outer square edges
   parametricbem2d::ParametrizedLine Or(SEo, NEo); // right
   parametricbem2d::ParametrizedLine ot(NEo, NWo); // top
   parametricbem2d::ParametrizedLine ol(NWo, SWo); // left
   parametricbem2d::ParametrizedLine ob(SWo, SEo); // bottom
   
-  unsigned numpanels = 2;
-  unsigned nd = numpanels * 12;
+  unsigned numpanels = 16;
+  unsigned nd = numpanels * 4;
 
   // Panels for the edges of the inner square
   parametricbem2d::PanelVector panels_ir(ir.split(numpanels));
@@ -50,10 +50,10 @@ int main() {
   parametricbem2d::PanelVector panels_it(it.split(numpanels));
 
   // Panels for the edges of outer square
-  parametricbem2d::PanelVector panels_or(Or.split(6*numpanels));
-  parametricbem2d::PanelVector panels_ot(ot.split(6*numpanels));
-  parametricbem2d::PanelVector panels_ol(ol.split(6*numpanels));
-  parametricbem2d::PanelVector panels_ob(ob.split(6*numpanels));
+  parametricbem2d::PanelVector panels_or(Or.split(2*numpanels));
+  parametricbem2d::PanelVector panels_ot(ot.split(2*numpanels));
+  parametricbem2d::PanelVector panels_ol(ol.split(2*numpanels));
+  parametricbem2d::PanelVector panels_ob(ob.split(2*numpanels));
 
   // Creating the ParametricMesh object
   parametricbem2d::PanelVector panels;
@@ -70,12 +70,12 @@ int main() {
   parametricbem2d::ParametrizedMesh mesh(panels);
 
   auto g = [&](double x1, double x2) {
-    return 3. - x1;
+    return 1.1 - x1;
   };
   auto eta = [&](double x1, double x2) {
     return 0.;
   };
-  double epsilon1 = 1., epsilon2 = 2.;
+  double epsilon1 = 1., epsilon2 = 100.;
 
   Eigen::VectorXd sol = transmission_bem::solve(mesh, nd, g, eta,
                                                 epsilon1, epsilon2, order);
@@ -87,9 +87,9 @@ int main() {
   std::cout << "\npsi_i" << std::endl;
   std::cout << sol.segment(ni, ni) << std::endl;
   std::cout << "\nu" << std::endl;
-  std::cout << sol.segment(ni*2, nd-2) << std::endl;
+  std::cout << sol.segment(ni*2, nd) << std::endl;
   std::cout << "\npsi" << std::endl;
-  std::cout << sol.segment(ni*2+nd-2, nn) << std::endl;
+  std::cout << sol.segment(ni*2+nd, nn) << std::endl;
 
   return 0;
 }

@@ -19,7 +19,7 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
                       double epsilon1, double epsilon2, unsigned order) {
   
   parametricbem2d::ContinuousSpace<1> trial_space; // in H^{1/2}
-  parametricbem2d::DiscontinuousSpace<0> test_space; // in H^{-1/2}
+  parametricbem2d::DiscontinuousSpace<0> test_space; // in H^{/2}
   parametricbem2d::ContinuousSpace<1> g_interp_space;
   parametricbem2d::DiscontinuousSpace<0> eta_interp_space;
   
@@ -49,9 +49,9 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
     return A_ii;
   };
   auto block_id = [&](Eigen::MatrixXd A) {
-    Eigen::MatrixXd A_id(ni, nd-2);
-    A_id << A.block(0, ni+1, ni, nd/2-1),
-            A.block(0, ni+nd/2+nn/2+1, ni, nd/2-1);
+    Eigen::MatrixXd A_id(ni, nd);
+    A_id << A.block(0, ni, ni, nd/2),
+            A.block(0, ni+nd/2+nn/2, ni, nd/2);
     return A_id;
   };
   auto block_in = [&](Eigen::MatrixXd A) {
@@ -61,25 +61,25 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
     return A_in;
   };
   auto block_di = [&](Eigen::MatrixXd A) {
-    Eigen::MatrixXd A_di(nd-2, ni);
-    A_di << A.block(ni+1, 0, nd/2-1, ni),
-            A.block(ni+nd/2+nn/2+1, 0, nd/2-1, ni);
+    Eigen::MatrixXd A_di(nd, ni);
+    A_di << A.block(ni, 0, nd/2, ni),
+            A.block(ni+nd/2+nn/2, 0, nd/2, ni);
     return A_di;
   };
   auto block_dd = [&](Eigen::MatrixXd A) {
-    Eigen::MatrixXd A_dd(nd-2, nd-2);
-    A_dd << A.block(ni+1, ni+1, nd/2-1, nd/2-1),
-            A.block(ni+1, ni+nd/2+nn/2+1, nd/2-1, nd/2-1),
-            A.block(ni+nd/2+nn/2+1, ni+1, nd/2-1, nd/2-1),
-            A.block(ni+nd/2+nn/2+1, ni+nd/2+nn/2+1, nd/2-1, nd/2-1);
+    Eigen::MatrixXd A_dd(nd, nd);
+    A_dd << A.block(ni, ni, nd/2, nd/2),
+            A.block(ni, ni+nd/2+nn/2, nd/2, nd/2),
+            A.block(ni+nd/2+nn/2, ni, nd/2, nd/2),
+            A.block(ni+nd/2+nn/2, ni+nd/2+nn/2, nd/2, nd/2);
     return A_dd;
   };
   auto block_dn = [&](Eigen::MatrixXd A) {
-    Eigen::MatrixXd A_dn(nd-2, nn);
-    A_dn << A.block(ni+1, ni+nd/2, nd/2-1, nn/2),
-            A.block(ni+1, ni+nd+nn/2, nd/2-1, nn/2),
-            A.block(ni+nd/2+nn/2+1, ni+nd/2, nd/2-1, nn/2),
-            A.block(ni+nd/2+nn/2+1, ni+nd+nn/2, nd/2-1, nn/2);
+    Eigen::MatrixXd A_dn(nd, nn);
+    A_dn << A.block(ni, ni+nd/2, nd/2, nn/2),
+            A.block(ni, ni+nd+nn/2, nd/2, nn/2),
+            A.block(ni+nd/2+nn/2, ni+nd/2, nd/2, nn/2),
+            A.block(ni+nd/2+nn/2, ni+nd+nn/2, nd/2, nn/2);
     return A_dn;
   };
   auto block_ni = [&](Eigen::MatrixXd A) {
@@ -89,11 +89,11 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
     return A_ni;
   };
   auto block_nd = [&](Eigen::MatrixXd A) {
-    Eigen::MatrixXd A_nd(nn, nd-2);
-    A_nd << A.block(ni+nd/2, ni+1, nn/2, nd/2-1),
-            A.block(ni+nd/2, ni+nd/2+nn/2+1, nn/2, nd/2-1),
-            A.block(ni+nd+nn/2, ni+1, nn/2, nd/2-1),
-            A.block(ni+nd+nn/2, ni+nd/2+nn/2+1, nn/2, nd/2-1);
+    Eigen::MatrixXd A_nd(nn, nd);
+    A_nd << A.block(ni+nd/2, ni, nn/2, nd/2),
+            A.block(ni+nd/2, ni+nd/2+nn/2, nn/2, nd/2),
+            A.block(ni+nd+nn/2, ni, nn/2, nd/2),
+            A.block(ni+nd+nn/2, ni+nd/2+nn/2, nn/2, nd/2);
     return A_nd;
   };
   auto block_nn = [&](Eigen::MatrixXd A) {
@@ -106,15 +106,16 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
   };
 
   // Assemble boundary data
-  Eigen::VectorXd g_N(nd-2);
-  g_N << g_interp.segment(ni+1, nd/2-1),
-         g_interp.segment(ni+nd/2+nn/2+1, nd/2-1);
+  Eigen::VectorXd g_N(nd);
+  g_N << g_interp.segment(ni, nd/2),
+         g_interp.segment(ni+nd/2+nn/2, nd/2);
 
   Eigen::VectorXd eta_N(nn);
   eta_N << eta_interp.segment(ni+nd/2, nn/2),
            eta_interp.segment(ni+nd+nn/2, nn/2);
 
-  Eigen::MatrixXd mat(ni*2+nd+nn-2, ni*2+nd+nn-2);
+  // Assemble Galerkin matrix
+  Eigen::MatrixXd mat(ni*2+nd+nn, ni*2+nd+nn);
   mat << 2. * block_ii(K),
          -(1. + epsilon2/epsilon1) * block_ii(V),
          0.5 * block_in(M) + block_in(K),
@@ -126,17 +127,18 @@ Eigen::VectorXd solve(const parametricbem2d::ParametrizedMesh &mesh,
          (epsilon1/epsilon2 + 1.) * block_ii(W),
          2. * block_ii(K).transpose(),
          block_in(W),
-         -0.5 * block_id(M) + block_di(K).transpose(),
+         (-0.5 * block_di(M) + block_di(K)).transpose(),
          -block_ni(W),
-         0.5 * block_ni(M) - block_in(K).transpose(),
+         (0.5 * block_in(M) - block_in(K)).transpose(),
          -block_nn(W),
-         0.5 * block_nd(M) - block_dn(K).transpose();
+         (0.5 * block_dn(M) - block_dn(K)).transpose();
 
-  Eigen::VectorXd rhs(ni*2+nd+nn-2);
+  // Assemble rhs vector
+  Eigen::VectorXd rhs(ni*2+nd+nn);
   rhs << -(0.5 * block_id(M) + block_id(K)) * g_N + block_in(V) * eta_N,
          -(0.5 * block_dd(M) + block_dd(K)) * g_N + block_dn(V) * eta_N,
-         -block_id(W) * g_N + (0.5 * block_in(M) - block_ni(K).transpose()) * eta_N,
-         block_nd(W) * g_N - (0.5 * block_nn(M) - block_nn(K).transpose()) * eta_N;
+         -block_id(W) * g_N + (0.5 * block_ni(M) - block_ni(K)).transpose() * eta_N,
+         block_nd(W) * g_N - (0.5 * block_nn(M) - block_nn(K)).transpose() * eta_N;
 
   Eigen::VectorXd sol = mat.lu().solve(rhs);
   return sol;
