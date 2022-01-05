@@ -71,9 +71,10 @@ int main() {
   for (const lf::mesh::Entity* edge : mesh_p->Entities(1)) {
     if (bd_flags(*edge)) {
       Eigen::MatrixXd endpoints = lf::geometry::Corners(*(edge->Geometry()));
-      Eigen::Vector2d local(0., 1.);
+      Eigen::VectorXd local_coord(1);
+      local_coord << 0.5;
       if (!dir_sel(endpoints.col(0)) || !dir_sel(endpoints.col(1))) {
-        auto u = mf_sol(*edge, local.transpose());
+        auto u = mf_sol(*edge, local_coord);
         std::cout << u[0] << std::endl;
       }
     }

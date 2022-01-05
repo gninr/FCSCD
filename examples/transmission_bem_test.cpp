@@ -40,20 +40,19 @@ int main() {
   parametricbem2d::ParametrizedLine ol(NWo, SWo); // left
   parametricbem2d::ParametrizedLine ob(SWo, SEo); // bottom
   
-  unsigned numpanels = 16;
-  unsigned nd = numpanels * 4;
+  unsigned nsplit = 16;
 
   // Panels for the edges of the inner square
-  parametricbem2d::PanelVector panels_ir(ir.split(numpanels));
-  parametricbem2d::PanelVector panels_ib(ib.split(numpanels));
-  parametricbem2d::PanelVector panels_il(il.split(numpanels));
-  parametricbem2d::PanelVector panels_it(it.split(numpanels));
+  parametricbem2d::PanelVector panels_ir(ir.split(nsplit));
+  parametricbem2d::PanelVector panels_ib(ib.split(nsplit));
+  parametricbem2d::PanelVector panels_il(il.split(nsplit));
+  parametricbem2d::PanelVector panels_it(it.split(nsplit));
 
   // Panels for the edges of outer square
-  parametricbem2d::PanelVector panels_or(Or.split(2*numpanels));
-  parametricbem2d::PanelVector panels_ot(ot.split(2*numpanels));
-  parametricbem2d::PanelVector panels_ol(ol.split(2*numpanels));
-  parametricbem2d::PanelVector panels_ob(ob.split(2*numpanels));
+  parametricbem2d::PanelVector panels_or(Or.split(2*nsplit));
+  parametricbem2d::PanelVector panels_ot(ot.split(2*nsplit));
+  parametricbem2d::PanelVector panels_ol(ol.split(2*nsplit));
+  parametricbem2d::PanelVector panels_ob(ob.split(2*nsplit));
 
   // Creating the ParametricMesh object
   parametricbem2d::PanelVector panels;
@@ -69,27 +68,33 @@ int main() {
 
   parametricbem2d::ParametrizedMesh mesh(panels);
 
-  auto g = [&](double x1, double x2) {
-    return 1.1 - x1;
-  };
-  auto eta = [&](double x1, double x2) {
-    return 0.;
-  };
   double epsilon1 = 1., epsilon2 = 100.;
 
-  Eigen::VectorXd sol = transmission_bem::solve(mesh, nd, g, eta,
-                                                epsilon1, epsilon2, order);
+  auto g = [](Eigen::Vector2d x) {
+    return 1.1 - x[0];
+  };
 
-  unsigned ni = mesh.getSplit();
-  unsigned nn = mesh.getNumPanels() - nd - ni;
+  auto eta = [](Eigen::Vector2d x) {
+    return 0;
+  };
+
+  auto dir_sel = [](const Eigen::Vector2d& x) {
+    return (x[0] - 1.1 > -1e-7 || x[0] + 1.1 < 1e-7);
+  };
+
+  parametricbem2d::ContinuousSpace<1> space_d;
+  parametricbem2d::DiscontinuousSpace<0> space_n;
+  transmission_bem::Solution sol = transmission_bem::solve(
+      mesh, space_d, space_n, dir_sel, g, eta, epsilon1, epsilon2, order);
+
   std::cout << "\nu_i" << std::endl;
-  std::cout << sol.segment(0, ni) << std::endl;
+  std::cout << sol.u_i << std::endl;
   std::cout << "\npsi_i" << std::endl;
-  std::cout << sol.segment(ni, ni) << std::endl;
+  std::cout << sol.psi_i << std::endl;
   std::cout << "\nu" << std::endl;
-  std::cout << sol.segment(ni*2, nd) << std::endl;
+  std::cout << sol.u << std::endl;
   std::cout << "\npsi" << std::endl;
-  std::cout << sol.segment(ni*2+nd, nn) << std::endl;
+  std::cout << sol.psi << std::endl;
 
   return 0;
 }

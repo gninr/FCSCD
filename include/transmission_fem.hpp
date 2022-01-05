@@ -46,12 +46,12 @@ Eigen::VectorXd solve(
   // Assemble rhs vector
   Eigen::VectorXd rhs(N_dofs);
   rhs.setZero();
-  auto edge_sel = [&](const lf::mesh::Entity& edge) {
+  auto edge_sel_neu = [&](const lf::mesh::Entity& edge) {
     return (bd_flags(edge) && !edge_sel_dir(edge));
   };
   lf::uscalfe::ScalarLoadEdgeVectorProvider<double, decltype(mf_eta),
-                                            decltype(edge_sel)>
-      elvec_builder_neu(fe_space, mf_eta, edge_sel);
+                                            decltype(edge_sel_neu)>
+      elvec_builder_neu(fe_space, mf_eta, edge_sel_neu);
   AssembleVectorLocally(1, dofh, elvec_builder_neu, rhs);
 
   // Fix components according to Dirichlet boundary conditions
