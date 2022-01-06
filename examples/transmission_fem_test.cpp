@@ -62,7 +62,7 @@ int main() {
       std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
 
   Eigen::VectorXd sol =
-      transmission_fem::solve(fe_space, dir_sel, g, eta, epsilon);
+      transmission_fem::Solve(fe_space, dir_sel, g, eta, epsilon);
   const lf::fe::MeshFunctionFE mf_sol(fe_space, sol);
   const lf::fe::MeshFunctionGradFE mf_grad_sol(fe_space, sol);
 

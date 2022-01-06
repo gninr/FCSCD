@@ -2,9 +2,7 @@
 #define TRANSMISSIONBEMHPP
 
 #include "abstract_bem_space.hpp"
-#include "continuous_space.hpp"
 #include "dirichlet.hpp"
-#include "discontinuous_space.hpp"
 #include "double_layer.hpp"
 #include "hypersingular.hpp"
 #include "parametrized_mesh.hpp"
@@ -17,7 +15,7 @@ struct Solution {
   Eigen::VectorXd u_i, psi_i, u, psi;
 };
 
-Eigen::VectorXd slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
+Eigen::VectorXd Slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
   unsigned n = ind.size();
   Eigen::VectorXd res(n);
   for (unsigned i = 0; i < n; ++i) {
@@ -26,48 +24,56 @@ Eigen::VectorXd slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
   return res;
 }
 
-Eigen::MatrixXd slice(Eigen::MatrixXd A,
+Eigen::MatrixXd Slice(Eigen::MatrixXd A,
                       Eigen::ArrayXi ind_row,
                       Eigen::ArrayXi ind_col) {
   unsigned num_rows = ind_row.size();
   unsigned num_cols = ind_col.size();
   Eigen::MatrixXd res(num_rows, num_cols);
   for (unsigned i = 0; i < num_rows; ++i) {
-    res.row(i) = slice(A.row(ind_row[i]), ind_col);
+    res.row(i) = Slice(A.row(ind_row[i]), ind_col);
   }
   return res;
 }
 
-Solution solve(const parametricbem2d::ParametrizedMesh &mesh,
-                      // Dirichlet trace space
-                      parametricbem2d::AbstractBEMSpace &space_d,
-                      // Neumann trace space
-                      parametricbem2d::AbstractBEMSpace &space_n,
-                      std::function<double(Eigen::Vector2d)> dir_sel,
-                      std::function<double(Eigen::Vector2d)> g,
-                      std::function<double(Eigen::Vector2d)> eta,
-                      double epsilon1, double epsilon2, unsigned order) {      
+// Number of global shape functions associated with different type of panels
+struct Dims {
+  unsigned i; // at interface
+  unsigned d; // on boundary with Dirichlet condition
+  unsigned n; // on boundary with Neumann condition
+};
+
+// Indices of global shape functions associated with different type of panels
+struct Indices {
+  Eigen::ArrayXi i; // at interface
+  Eigen::ArrayXi d; // on boundary with Dirichlet condition
+  Eigen::ArrayXi n; // on boundary with Neumann condition
+};
+
+// Preprocessing of Dirichlet trace space
+void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
+                         parametricbem2d::AbstractBEMSpace &space,
+                         std::function<bool(Eigen::Vector2d)> dir_sel,
+                         Dims *dims, Indices *ind) {
   // Get panels
   parametricbem2d::PanelVector panels = mesh.getPanels();
   // Count number of panels
   unsigned numpanels = mesh.getNumPanels();
   unsigned numpanels_i = mesh.getSplit();
-
-  // Preprocessing of Dirichlet trace space
-
   // Number of reference shape functions
-  unsigned q_d = space_d.getQ();
+  unsigned q = space.getQ();
   // Space dimension
-  unsigned dim_d = space_d.getSpaceDim(numpanels);
+  unsigned dim = space.getSpaceDim(numpanels);
+
   // Mark global shape functions associated with different type of panels
-  Eigen::ArrayXi space_d_sel_i(Eigen::VectorXi::Zero(dim_d));
-  Eigen::ArrayXi space_d_sel_d(Eigen::VectorXi::Zero(dim_d));
+  Eigen::ArrayXi space_sel_i(Eigen::VectorXi::Zero(dim));
+  Eigen::ArrayXi space_sel_d(Eigen::VectorXi::Zero(dim));
   for (unsigned i = 0; i < numpanels; ++i) {
     // Panels at interface
     if (i < numpanels_i) {
-      for (unsigned k = 0; k < q_d; ++k) {
-        unsigned II = space_d.LocGlobMap2(k + 1, i + 1, mesh) - 1;
-        space_d_sel_i[II] = 1;
+      for (unsigned k = 0; k < q; ++k) {
+        unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
+        space_sel_i[II] = 1;
       }
     }
     // Panels on boundary
@@ -75,51 +81,64 @@ Solution solve(const parametricbem2d::ParametrizedMesh &mesh,
       parametricbem2d::AbstractParametrizedCurve &gamma_pi = *panels[i];
       // Panels with Dirichlet boundary condition
       if (dir_sel(gamma_pi(-1)) && dir_sel(gamma_pi(1))) {
-        for (unsigned k = 0; k < q_d; ++k) {
-          unsigned II = space_d.LocGlobMap2(k + 1, i + 1, mesh) - 1;
-          space_d_sel_d[II] = 1;
+        for (unsigned k = 0; k < q; ++k) {
+          unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
+          space_sel_d[II] = 1;
         }
       }
     }
   }
-  // Number of global shape functions associated with panels at interface
-  unsigned dim_d_i = space_d_sel_i.sum();
-  // Number of global shape functions associated with panels with different
-  // boundary conditions
-  unsigned dim_d_d = space_d_sel_d.sum();
-  unsigned dim_d_n = dim_d - dim_d_i - dim_d_d;
-  // Indices of global shape functions associated with different type of panels
-  Eigen::ArrayXi ind_d_i(dim_d_i), ind_d_d(dim_d_d), ind_d_n(dim_d_n);
+
+  // Compute number of global shape functions associated with
+  // different type of panels
+  dims->i = space_sel_i.sum();
+  dims->d = space_sel_d.sum();
+  dims->n = dim - dims->i - dims->d;
+  // Compute indices of global shape functions associated with
+  // different type of panels
+  ind->i = Eigen::ArrayXi(dims->i);
+  ind->d = Eigen::ArrayXi(dims->d);
+  ind->n = Eigen::ArrayXi(dims->n);
   {
     unsigned curr_i = 0, curr_n = 0, curr_d = 0;
-    for (unsigned i = 0; i < dim_d; ++i) {
-      if (space_d_sel_i[i]) {
-        ind_d_i[curr_i++] = i;
+    for (unsigned i = 0; i < dim; ++i) {
+      if (space_sel_i[i]) {
+        ind->i[curr_i++] = i;
       }
-      else if (space_d_sel_d[i]) {
-        ind_d_d[curr_d++] = i;
+      else if (space_sel_d[i]) {
+        ind->d[curr_d++] = i;
       }
       else {
-        ind_d_n[curr_n++] = i;
+        ind->n[curr_n++] = i;
       }
     }
   }
+}
 
-  // Preprocessing of Neumann trace space
-
+// Preprocessing of Neumann trace space
+void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
+                         parametricbem2d::AbstractBEMSpace &space,
+                         std::function<bool(Eigen::Vector2d)> dir_sel,
+                         Dims *dims, Indices *ind) {
+  // Get panels
+  parametricbem2d::PanelVector panels = mesh.getPanels();
+  // Count number of panels
+  unsigned numpanels = mesh.getNumPanels();
+  unsigned numpanels_i = mesh.getSplit();
   // Number of reference shape functions
-  unsigned q_n = space_n.getQ();
+  unsigned q = space.getQ();
   // Space dimension
-  unsigned dim_n = space_n.getSpaceDim(numpanels);
+  unsigned dim = space.getSpaceDim(numpanels);
+
   // Mark global shape functions associated with different type of panels
-  Eigen::ArrayXi space_n_sel_i = Eigen::VectorXi::Zero(dim_n);
-  Eigen::ArrayXi space_n_sel_n = Eigen::VectorXi::Zero(dim_n);
+  Eigen::ArrayXi space_sel_i = Eigen::VectorXi::Zero(dim);
+  Eigen::ArrayXi space_sel_n = Eigen::VectorXi::Zero(dim);
   for (unsigned i = 0; i < numpanels; ++i) {
     // Panels at interface
     if (i < numpanels_i) {
-      for (unsigned k = 0; k < q_n; ++k) {
-        unsigned II = space_n.LocGlobMap2(k + 1, i + 1, mesh) - 1;
-        space_n_sel_i[II] = 1;
+      for (unsigned k = 0; k < q; ++k) {
+        unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
+        space_sel_i[II] = 1;
       }
     }
     // Panels on boundary
@@ -127,35 +146,78 @@ Solution solve(const parametricbem2d::ParametrizedMesh &mesh,
       parametricbem2d::AbstractParametrizedCurve &gamma_pi = *panels[i];
       // Panels with Neumann boundary condition
       if (!dir_sel(gamma_pi(-1)) || !dir_sel(gamma_pi(1))) {
-        for (unsigned k = 0; k < q_n; ++k) {
-          unsigned II = space_n.LocGlobMap2(k + 1, i + 1, mesh) - 1;
-          space_n_sel_n[II] = 1;
+        for (unsigned k = 0; k < q; ++k) {
+          unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
+          space_sel_n[II] = 1;
         }
       }
     }
   }
-  // Number of global shape functions associated with panels at interface
-  unsigned dim_n_i = space_n_sel_i.sum();
-  // Number of global shape functions associated with panels with different
-  // boundary conditions
-  unsigned dim_n_n = space_n_sel_n.sum();
-  unsigned dim_n_d = dim_n - dim_n_i - dim_n_n;
-  // Indices of global shape functions associated with different type of panels
-  Eigen::ArrayXi ind_n_i(dim_n_i), ind_n_n(dim_n_n), ind_n_d(dim_n_d);
+
+  // Compute number of global shape functions associated with
+  // different type of panels
+  dims->i = space_sel_i.sum();
+  dims->n = space_sel_n.sum();
+  dims->d = dim - dims->i - dims->n;
+  // Compute indices of global shape functions associated with
+  // different type of panels
+  ind->i = Eigen::ArrayXi(dims->i);
+  ind->n = Eigen::ArrayXi(dims->n);
+  ind->d = Eigen::ArrayXi(dims->d);
   {
     unsigned curr_i = 0, curr_n = 0, curr_d = 0;
-    for (unsigned i = 0; i < dim_n; ++i) {
-      if (space_n_sel_i[i]) {
-        ind_n_i[curr_i++] = i;
+    for (unsigned i = 0; i < dim; ++i) {
+      if (space_sel_i[i]) {
+        ind->i[curr_i++] = i;
       }
-      else if (space_n_sel_n[i]) {
-        ind_n_n[curr_n++] = i;
+      else if (space_sel_n[i]) {
+        ind->n[curr_n++] = i;
       }
       else {
-        ind_n_d[curr_d++] = i;
+        ind->d[curr_d++] = i;
       }
     }
   }
+}
+
+// Interpolate Dirichlet data in Dirichlet trace space
+Eigen::VectorXd InterpolateDirData(
+    const parametricbem2d::ParametrizedMesh &mesh,
+    std::function<double(Eigen::Vector2d)> g,
+    parametricbem2d::AbstractBEMSpace &space,
+    Indices ind) {
+  Eigen::VectorXd g_interp = space.Interpolate(
+      [&](double x, double y) { return g(Eigen::Vector2d(x, y)); },
+      mesh);
+  return Slice(g_interp, ind.d);
+}
+
+// Interpolate Neumann data in Neumann trace space
+Eigen::VectorXd InterpolateNeuData(
+    const parametricbem2d::ParametrizedMesh &mesh,
+    std::function<double(Eigen::Vector2d)> eta,
+    parametricbem2d::AbstractBEMSpace &space,
+    Indices ind) {
+  Eigen::VectorXd eta_interp = space.Interpolate(
+      [&](double x, double y) { return eta(Eigen::Vector2d(x, y)); },
+      mesh);
+  return Slice(eta_interp, ind.n);
+}
+
+Solution Solve(const parametricbem2d::ParametrizedMesh &mesh,
+               // Dirichlet trace space
+               parametricbem2d::AbstractBEMSpace &space_d,
+               // Neumann trace space
+               parametricbem2d::AbstractBEMSpace &space_n,
+               std::function<bool(Eigen::Vector2d)> dir_sel,
+               std::function<double(Eigen::Vector2d)> g,
+               std::function<double(Eigen::Vector2d)> eta,
+               double epsilon1, double epsilon2, unsigned order) {      
+  // Compute Space Information
+  Dims dims_d, dims_n;
+  Indices ind_d, ind_n;
+  ComputeDirSpaceInfo(mesh, space_d, dir_sel, &dims_d, &ind_d);
+  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, &dims_n, &ind_n);
 
   // Get Galerkin matrices
   Eigen::MatrixXd M = parametricbem2d::MassMatrix(
@@ -168,58 +230,57 @@ Solution solve(const parametricbem2d::ParametrizedMesh &mesh,
                           mesh, space_d, order);
 
   // Assemble LHS
-  Eigen::MatrixXd lhs(dim_n_i + dim_n_d + dim_d_i + dim_d_n,
-                      dim_d_i + dim_n_i + dim_d_n + dim_n_d);
-  lhs << slice(K, ind_n_i, ind_d_i),
-         -(epsilon2 / epsilon1 + 1) * slice(V, ind_n_i, ind_n_i),
-         slice(K, ind_n_i, ind_d_n),
-         -slice(V, ind_n_i, ind_n_d),
-         slice(K, ind_n_d, ind_d_i),
-         -slice(V, ind_n_d, ind_n_i),
-         slice(K, ind_n_d, ind_d_n),
-         -slice(V, ind_n_d, ind_n_d),
-         (epsilon1 / epsilon2 + 1) * slice(W, ind_d_i, ind_d_i),
-         2 * slice(K, ind_n_i, ind_d_i).transpose(),
-         slice(W, ind_d_i, ind_d_n),
-         slice(K, ind_n_d, ind_d_i).transpose(),
-         slice(W, ind_d_n, ind_d_i),
-         slice(K, ind_n_i, ind_d_n).transpose(),
-         slice(W, ind_d_n, ind_d_n),
-         slice(K, ind_n_d, ind_d_n).transpose();
+  Eigen::MatrixXd lhs(dims_d.i + dims_n.i + dims_d.n + dims_n.d,
+                      dims_d.i + dims_n.i + dims_d.n + dims_n.d);
+  lhs << (epsilon1 / epsilon2 + 1) * Slice(W, ind_d.i, ind_d.i),
+         2 * Slice(K, ind_n.i, ind_d.i).transpose(),
+         Slice(W, ind_d.i, ind_d.n),
+         Slice(K, ind_n.d, ind_d.i).transpose(),
+         
+         2 * Slice(K, ind_n.i, ind_d.i),
+         -(epsilon2 / epsilon1 + 1) * Slice(V, ind_n.i, ind_n.i),
+         Slice(K, ind_n.i, ind_d.n),
+         -Slice(V, ind_n.i, ind_n.d),
 
-  // Get interpolants of boundary data
-  Eigen::VectorXd g_interp = space_d.Interpolate(
-      [&](double x, double y) { return g(Eigen::Vector2d(x, y)); },
-      mesh);
-  Eigen::VectorXd eta_interp = space_n.Interpolate(
-      [&](double x, double y) { return eta(Eigen::Vector2d(x, y)); },
-      mesh);
+         Slice(W, ind_d.n, ind_d.i),
+         Slice(K, ind_n.i, ind_d.n).transpose(),
+         Slice(W, ind_d.n, ind_d.n),
+         Slice(K, ind_n.d, ind_d.n).transpose(),
+
+         Slice(K, ind_n.d, ind_d.i),
+         -Slice(V, ind_n.d, ind_n.i),
+         Slice(K, ind_n.d, ind_d.n),
+         -Slice(V, ind_n.d, ind_n.d);
 
   // Assemble RHS
-  Eigen::MatrixXd rhs_mat(dim_n_i + dim_n_d + dim_d_i + dim_d_n,
-                          dim_d_d + dim_n_n);
-  rhs_mat << -slice(K, ind_n_i, ind_d_d),
-             slice(V, ind_n_i, ind_n_n),
-             -0.5 * slice(M, ind_n_d, ind_d_d) - slice(K, ind_n_d, ind_d_d),
-             slice(V, ind_n_d, ind_n_n),
-             -slice(W, ind_d_i, ind_d_d),
-             -slice(K, ind_n_n, ind_d_i).transpose(),
-             -slice(W, ind_d_n, ind_d_d),
-             (0.5 * slice(M, ind_n_n, ind_d_n)
-                - slice(K, ind_n_n, ind_d_n)).transpose();
+  Eigen::MatrixXd rhs_mat(dims_d.i + dims_n.i + dims_d.n + dims_n.d,
+                          dims_d.d + dims_n.n);
+  rhs_mat << -Slice(W, ind_d.i, ind_d.d),
+             -Slice(K, ind_n.n, ind_d.i).transpose(),
+             
+             -Slice(K, ind_n.i, ind_d.d),
+             Slice(V, ind_n.i, ind_n.n),
 
-  Eigen::VectorXd rhs_vec(dim_d_d + dim_n_n);
-  rhs_vec << slice(g_interp, ind_d_d), slice(eta_interp, ind_n_n);
+             -Slice(W, ind_d.n, ind_d.d),
+             (0.5 * Slice(M, ind_n.n, ind_d.n)
+                 - Slice(K, ind_n.n, ind_d.n)).transpose(),
+
+             -0.5 * Slice(M, ind_n.d, ind_d.d) - Slice(K, ind_n.d, ind_d.d),
+             Slice(V, ind_n.d, ind_n.n);
+
+  Eigen::VectorXd rhs_vec(dims_d.d + dims_n.n);
+  rhs_vec << InterpolateDirData(mesh, g, space_d, ind_d),
+             InterpolateNeuData(mesh, eta, space_n, ind_n);
 
   // Solve LSE
   Eigen::VectorXd sol_vec = lhs.lu().solve(rhs_mat * rhs_vec);
 
   // Construct solution
   Solution sol;
-  sol.u_i = sol_vec.segment(0, dim_d_i);
-  sol.psi_i = sol_vec.segment(dim_d_i, dim_n_i);
-  sol.u = sol_vec.segment(dim_d_i + dim_n_i, dim_d_n);
-  sol.psi = sol_vec.segment(dim_d_i + dim_n_i + dim_d_n, dim_n_d);
+  sol.u_i = sol_vec.segment(0, dims_d.i);
+  sol.psi_i = sol_vec.segment(dims_d.i, dims_n.i);
+  sol.u = sol_vec.segment(dims_d.i + dims_n.i, dims_d.n);
+  sol.psi = sol_vec.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d);
   return sol;
 }
 } // namespace transmission_bem

@@ -9,7 +9,7 @@
 #include <lf/uscalfe/uscalfe.h>
 
 namespace transmission_fem {
-Eigen::VectorXd solve(
+Eigen::VectorXd Solve(
     std::shared_ptr<lf::uscalfe::UniformScalarFESpace<double>> fe_space,
     std::function<bool(Eigen::Vector2d)> dir_sel,
     std::function<double(Eigen::Vector2d)> g,
