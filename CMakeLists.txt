@@ -11,5 +11,5 @@ project(fcscd)
 hunter_add_package(lehrfempp)
 find_package(lehrfempp CONFIG REQUIRED)
 
-add_subdirectory(examples)
 add_subdirectory(external/2dparametricbem)
+add_subdirectory(test)
