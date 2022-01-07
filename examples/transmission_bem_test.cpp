@@ -1,17 +1,13 @@
 #include "transmission_bem.hpp"
 
 #include <cmath>
-#include <fstream>
 #include <iostream>
-#include <string>
 
 #include "parametrized_line.hpp"
 #include "parametrized_mesh.hpp"
 #include <Eigen/Dense>
 
 int main() {
-  std::string filename = "transmission_bem.txt";
-  std::ofstream output(filename);
   std::cout << "Solve transmission problem using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
   // Gauss quadrature order

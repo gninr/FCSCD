@@ -1,6 +1,8 @@
 #ifndef TRANSMISSIONBEMHPP
 #define TRANSMISSIONBEMHPP
 
+#include <functional>
+
 #include "abstract_bem_space.hpp"
 #include "dirichlet.hpp"
 #include "double_layer.hpp"
@@ -52,7 +54,7 @@ struct Indices {
 
 // Preprocessing of Dirichlet trace space
 void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
-                         parametricbem2d::AbstractBEMSpace &space,
+                         const parametricbem2d::AbstractBEMSpace &space,
                          std::function<bool(Eigen::Vector2d)> dir_sel,
                          Dims *dims, Indices *ind) {
   // Get panels
@@ -78,9 +80,9 @@ void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
     }
     // Panels on boundary
     else {
-      parametricbem2d::AbstractParametrizedCurve &gamma_pi = *panels[i];
+      parametricbem2d::AbstractParametrizedCurve &pi = *panels[i];
       // Panels with Dirichlet boundary condition
-      if (dir_sel(gamma_pi(-1)) && dir_sel(gamma_pi(1))) {
+      if (dir_sel(pi(-1)) && dir_sel(pi(1))) {
         for (unsigned k = 0; k < q; ++k) {
           unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
           space_sel_d[II] = 1;
@@ -117,7 +119,7 @@ void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
 
 // Preprocessing of Neumann trace space
 void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
-                         parametricbem2d::AbstractBEMSpace &space,
+                         const parametricbem2d::AbstractBEMSpace &space,
                          std::function<bool(Eigen::Vector2d)> dir_sel,
                          Dims *dims, Indices *ind) {
   // Get panels
@@ -143,9 +145,9 @@ void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
     }
     // Panels on boundary
     else {
-      parametricbem2d::AbstractParametrizedCurve &gamma_pi = *panels[i];
+      parametricbem2d::AbstractParametrizedCurve &pi = *panels[i];
       // Panels with Neumann boundary condition
-      if (!dir_sel(gamma_pi(-1)) || !dir_sel(gamma_pi(1))) {
+      if (!dir_sel(pi(-1)) || !dir_sel(pi(1))) {
         for (unsigned k = 0; k < q; ++k) {
           unsigned II = space.LocGlobMap2(k + 1, i + 1, mesh) - 1;
           space_sel_n[II] = 1;
@@ -184,7 +186,7 @@ void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
 Eigen::VectorXd InterpolateDirData(
     const parametricbem2d::ParametrizedMesh &mesh,
     std::function<double(Eigen::Vector2d)> g,
-    parametricbem2d::AbstractBEMSpace &space,
+    const parametricbem2d::AbstractBEMSpace &space,
     Indices ind) {
   Eigen::VectorXd g_interp = space.Interpolate(
       [&](double x, double y) { return g(Eigen::Vector2d(x, y)); },
@@ -196,7 +198,7 @@ Eigen::VectorXd InterpolateDirData(
 Eigen::VectorXd InterpolateNeuData(
     const parametricbem2d::ParametrizedMesh &mesh,
     std::function<double(Eigen::Vector2d)> eta,
-    parametricbem2d::AbstractBEMSpace &space,
+    const parametricbem2d::AbstractBEMSpace &space,
     Indices ind) {
   Eigen::VectorXd eta_interp = space.Interpolate(
       [&](double x, double y) { return eta(Eigen::Vector2d(x, y)); },
@@ -206,9 +208,9 @@ Eigen::VectorXd InterpolateNeuData(
 
 Solution Solve(const parametricbem2d::ParametrizedMesh &mesh,
                // Dirichlet trace space
-               parametricbem2d::AbstractBEMSpace &space_d,
+               const parametricbem2d::AbstractBEMSpace &space_d,
                // Neumann trace space
-               parametricbem2d::AbstractBEMSpace &space_n,
+               const parametricbem2d::AbstractBEMSpace &space_n,
                std::function<bool(Eigen::Vector2d)> dir_sel,
                std::function<double(Eigen::Vector2d)> g,
                std::function<double(Eigen::Vector2d)> eta,
