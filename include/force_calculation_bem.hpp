@@ -158,13 +158,18 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
 
   double force = 0.0;
 
+  double a_V_ii = 0, a_V_iD = 0, a_V_Di = 0,
+         a_K_ii_1 = 0, a_K_ii_2 = 0, a_K_iD_1 = 0, a_K_iD_2 = 0, a_K_Ni_1 = 0, a_K_Ni_2 = 0,
+         a_W_ii = 0, a_W_iN = 0, a_W_Ni = 0,
+         b_V_Ni = 0, b_K_Di = 0, b_K_iN = 0, b_W_Di = 0,
+         J = 0;
   {
     Kernel1 kernel;
     Factor1 F;
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_n, space_n,
         dims_n, dims_n, ind_n, ind_n, kernel, F, F, nu, order);
     // a_V_ii(psi_i, pi_i)
-    force += -c * state_sol.psi_i.dot(mat * adj_sol.psi_i);
+    a_V_ii += -c * state_sol.psi_i.dot(mat * adj_sol.psi_i);
   }
 
   {
@@ -173,13 +178,13 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_n, space_n,
         dims_n, dims_n, ind_n, ind_n, kernel, F, F, nu, order);
     // a_V_iD(psi_i, pi)
-    force += c * adj_sol.psi.dot(
-                     mat.block(0, 0, dims_n.d, dims_n.i) * state_sol.psi_i);
+    a_V_iD += c * adj_sol.psi.dot(
+                      mat.block(0, 0, dims_n.d, dims_n.i) * state_sol.psi_i);
     // a_V_Di(psi, pi_i)
-    force += c * state_sol.psi.dot(
-                     mat.block(0, 0, dims_n.d, dims_n.i) * adj_sol.psi_i);
+    a_V_Di += c * state_sol.psi.dot(
+                      mat.block(0, 0, dims_n.d, dims_n.i) * adj_sol.psi_i);
     // b_V_Ni(eta, pi_i)
-    force +=
+    b_V_Ni +=
         c * eta_interp.dot(
                 mat.block(dims_n.d, 0, dims_n.n, dims_n.i) * adj_sol.psi_i);
   }
@@ -190,9 +195,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_n, space_d,
         dims_n, dims_d, ind_n, ind_d, kernel, F, F, nu, order);
     // a_K_ii(u_i, pi_i)
-    force += c * adj_sol.psi_i.dot(mat * state_sol.u_i);
+    a_K_ii_1 += c * adj_sol.psi_i.dot(mat * state_sol.u_i);
     // a_K_ii(rho_i, psi_i)
-    force += c * state_sol.psi_i.dot(mat * adj_sol.u_i);
+    a_K_ii_2 += c * state_sol.psi_i.dot(mat * adj_sol.u_i);
   }
 
   {
@@ -200,15 +205,15 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Factor1 F;
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_n, space_d,
         dims_n, dims_d, ind_n, ind_d, kernel, F, F, nu, order);
-    // a_K_iD(u_i, pi)
-    force += c * adj_sol.psi.dot(
-                     mat.block(0, 0, dims_n.d, dims_d.i) * state_sol.u_i);
     // a_K_iD(rho_i, psi)
-    force += c * state_sol.psi.dot(
-                     mat.block(0, 0, dims_n.d, dims_d.i) * adj_sol.u_i);
+    a_K_iD_1 += c * state_sol.psi.dot(
+                        mat.block(0, 0, dims_n.d, dims_d.i) * adj_sol.u_i);
+    // a_K_iD(u_i, pi)
+    a_K_iD_2 += c * adj_sol.psi.dot(
+                        mat.block(0, 0, dims_n.d, dims_d.i) * state_sol.u_i);
     // b_K_iN(rho_i, eta)
-    force += c * eta_interp.dot(
-                     mat.block(dims_n.d, 0, dims_n.n, dims_d.i) * adj_sol.u_i);
+    b_K_iN += c * eta_interp.dot(
+                      mat.block(dims_n.d, 0, dims_n.n, dims_d.i) * adj_sol.u_i);
   }
 
   {
@@ -217,15 +222,15 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_d, space_n,
         dims_d, dims_n, ind_d, ind_n, kernel, F, F, nu, order);
     // a_K_Ni(u, pi_i)
-    force += c * state_sol.u.dot(
-                     mat.block(dims_d.d, 0, dims_d.n, dims_n.i) *
-                         adj_sol.psi_i);
+    a_K_Ni_1 += c * state_sol.u.dot(
+                        mat.block(dims_d.d, 0, dims_d.n, dims_n.i) *
+                            adj_sol.psi_i);
     // a_K_Ni(rho, psi_i)
-    force += c * adj_sol.u.dot(
-                     mat.block(dims_d.d, 0, dims_d.n, dims_n.i) *
-                         state_sol.psi_i);
+    a_K_Ni_2 += c * adj_sol.u.dot(
+                        mat.block(dims_d.d, 0, dims_d.n, dims_n.i) *
+                            state_sol.psi_i);
     // b_K_Di(g, pi_i)
-    force +=
+    b_K_Di +=
         c * g_interp.dot(
                 mat.block(0, 0, dims_d.d, dims_n.i) * state_sol.psi_i);
   }
@@ -236,7 +241,7 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, F, nu, order);
     // a_W_ii(u_i, rho_i) term1
-    force += -c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    a_W_ii += -c * adj_sol.u_i.dot(mat * state_sol.u_i);
   }
 
   {
@@ -246,9 +251,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_ii(u_i, rho_i) term2
-    force += c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    a_W_ii += c * adj_sol.u_i.dot(mat * state_sol.u_i);
     // a_W_ii(u_i, rho_i) term4
-    force += c * state_sol.u_i.dot(mat * adj_sol.u_i);
+    a_W_ii += c * state_sol.u_i.dot(mat * adj_sol.u_i);
   }
 
   {
@@ -258,9 +263,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_ii(u_i, rho_i) term3
-    force += c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    a_W_ii += c * adj_sol.u_i.dot(mat * state_sol.u_i);
     // a_W_ii(u_i, rho_i) term5
-    force += c * state_sol.u_i.dot(mat * adj_sol.u_i);
+    a_W_ii += c * state_sol.u_i.dot(mat * adj_sol.u_i);
   }
 
   {
@@ -269,16 +274,16 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, F, nu, order);
     // a_W_iN(u_i, rho) term1
-    force += -c * adj_sol.u.dot(
-                      mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
-                          state_sol.u_i);
+    a_W_iN += -c * adj_sol.u.dot(
+                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
+                           state_sol.u_i);
     // a_W_Ni(u, rho_i) term1
-    force += -c * state_sol.u.dot(
-                      mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
-                          adj_sol.u_i);
+    a_W_Ni += -c * state_sol.u.dot(
+                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
+                           adj_sol.u_i);
     // b_W_Di(g, rho_i) term1
-    force += -c * g_interp.dot(
-                      mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    b_W_Di += -c * g_interp.dot(
+                       mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
   }
 
   {
@@ -288,16 +293,16 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_iN(u_i, rho) term2
-    force += c * adj_sol.u.dot(
-                      mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
-                          state_sol.u_i);
+    a_W_iN += c * adj_sol.u.dot(
+                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
+                           state_sol.u_i);
     // a_W_Ni(u, rho_i) term2
-    force += c * state_sol.u.dot(
+    a_W_Ni += c * state_sol.u.dot(
                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
                           adj_sol.u_i);
     // b_W_Di(g, rho_i) term2
-    force += -c * g_interp.dot(
-                      mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    b_W_Di += -c * g_interp.dot(
+                       mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
   }
 
   {
@@ -307,25 +312,33 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Eigen::MatrixXd mat = ComputeGeneralMatrix(mesh, space_d, space_d,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_iN(u_i, rho) term3
-    force += c * adj_sol.u.dot(
+    a_W_iN += c * adj_sol.u.dot(
                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
                           state_sol.u_i);
     // a_W_Ni(u, rho_i) term3
-    force += c * state_sol.u.dot(
+    a_W_Ni += c * state_sol.u.dot(
                       mat.block(dims_d.d, 0, dims_d.n, dims_d.i) *
                           adj_sol.u_i);
     // b_W_Di(g, rho_i) term3
-    force += -c * g_interp.dot(
-                      mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    b_W_Di += -c * g_interp.dot(
+                       mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
   }
 
   {
     Eigen::MatrixXd mat = ComputeMatrixJ(mesh, space_d, space_n,
         dims_d, dims_n, ind_d, ind_n, nu, order);
     // J(u_i, psi_i, u, psi)
-    force += 0.5 * (epsilon2 - epsilon1) *
-                 state_sol.u_i.dot(mat * adj_sol.psi_i);
+    J += 0.5 * (epsilon2 - epsilon1) *
+             state_sol.u_i.dot(mat * adj_sol.psi_i);
   }
+
+  force = J
+      + (epsilon1 / epsilon2 + 1) * a_W_ii + 2 * a_K_ii_2 + a_W_Ni + a_K_iD_1
+      + b_W_Di + b_K_iN
+      + 2 * a_K_ii_1 - (epsilon2 / epsilon1 + 1) * a_V_ii + a_K_Ni_1 - a_V_Di
+      + b_K_Di - b_V_Ni
+      + a_W_iN + a_K_Ni_2
+      + a_K_iD_2 - a_V_iD;
 
   return force;
 }
