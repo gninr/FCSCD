@@ -73,15 +73,13 @@ Solution SolveAdjoint(const parametricbem2d::ParametrizedMesh &mesh,
          -Slice(V, ind_n.d, ind_n.d);
 
   // Assemble RHS
-  Eigen::VectorXd rhs(lhs.rows());
-  rhs << (epsilon1 - epsilon2) / 2
-             * Slice(M, ind_n.i, ind_d.i).transpose() * state_sol.psi_i,
-         (epsilon1 - epsilon2) / 2
-             * Slice(M, ind_n.i, ind_d.i) * state_sol.u_i,
-         -epsilon2 / 2 * Slice(M, ind_n.n, ind_d.n).transpose()
-             * InterpolateNeuData(mesh, eta, space_n, ind_n),
-         -epsilon2 / 2 * Slice(M, ind_n.d, ind_d.d)
-             * InterpolateDirData(mesh, g, space_d, ind_d);
+  Eigen::VectorXd rhs = Eigen::VectorXd::Zero(lhs.rows());
+  rhs.segment(dims_d.i + dims_n.i, dims_d.n) =
+      0.5 * epsilon2 * Slice(M, ind_n.n, ind_d.n).transpose()
+          * InterpolateNeuData(mesh, eta, space_n, ind_n);
+  rhs.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d) =
+      0.5 * epsilon2 * Slice(M, ind_n.d, ind_d.d)
+          * InterpolateDirData(mesh, g, space_d, ind_d);
 
   // Solve LSE
   Eigen::HouseholderQR<Eigen::MatrixXd> dec(lhs);
@@ -94,47 +92,6 @@ Solution SolveAdjoint(const parametricbem2d::ParametrizedMesh &mesh,
   sol.u = sol_vec.segment(dims_d.i + dims_n.i, dims_d.n);
   sol.psi = sol_vec.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d);
   return sol;
-}
-
-Eigen::MatrixXd ComputeMatrixJ(
-    const parametricbem2d::ParametrizedMesh &mesh,
-    const parametricbem2d::AbstractBEMSpace &space_x,
-    const parametricbem2d::AbstractBEMSpace &space_y,
-    const Dims &dims_x, const Dims &dims_y,
-    const Indices &ind_x, const Indices &ind_y,
-    const AbstractVelocityField &nu, unsigned order) {
-  parametricbem2d::PanelVector panels = mesh.getPanels();
-  unsigned Q_x = space_x.getQ();
-  unsigned Q_y = space_y.getQ();
-  unsigned numpanels_i = mesh.getSplit();
-  QuadRule GaussQR = getGaussQR(order);
-  // Initialize matrix
-  Eigen::MatrixXd mat = Eigen::MatrixXd::Zero(dims_x.all, dims_y.all);
-
-  for (unsigned i = 0; i < numpanels_i; ++i) {
-    parametricbem2d::AbstractParametrizedCurve &pi = *panels[i];
-    for (unsigned I = 0; I < Q_x; ++I) {
-      for (unsigned J = 0; J < Q_y; ++J) {
-        auto integrand = [&](double s) {
-          Eigen::Vector2d x = pi(s);
-          Eigen::Vector2d tangent = pi.Derivative(s);
-          Eigen::Vector2d normal(tangent(1), -tangent(0));
-          normal /= normal.norm();
-          return space_x.evaluateShapeFunction(I, s) *
-                 space_y.evaluateShapeFunction(J, s) *
-                 (normal.dot(nu.grad(x) * normal) - nu.div(x)) *
-                 pi.Derivative(s).norm();
-        };
-        // Local to global mapping of elements
-        unsigned II = space_x.LocGlobMap2(I + 1, i + 1, mesh) - 1;
-        unsigned JJ = space_y.LocGlobMap2(J + 1, i + 1, mesh) - 1;
-        mat(II, JJ) +=
-            parametricbem2d::ComputeIntegral(integrand, -1, 1, GaussQR);
-      }
-    }
-  }
-
-  return Slice(mat, ind_x.i, ind_y.i);
 }
 
 double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
@@ -158,11 +115,11 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
 
   double force = 0.0;
 
-  double a_V_ii = 0, a_V_iD = 0, a_V_Di = 0,
-         a_K_ii_1 = 0, a_K_ii_2 = 0, a_K_iD_1 = 0, a_K_iD_2 = 0, a_K_Ni_1 = 0, a_K_Ni_2 = 0,
+  double a_V_ii = 0, a_V_iD = 0, a_V_Di = 0, a_K_ii_1 = 0, a_K_ii_2 = 0,
+         a_K_iD_1 = 0, a_K_iD_2 = 0, a_K_Ni_1 = 0, a_K_Ni_2 = 0,
          a_W_ii = 0, a_W_iN = 0, a_W_Ni = 0,
-         b_V_Ni = 0, b_K_Di = 0, b_K_iN = 0, b_W_Di = 0,
-         J = 0;
+         b_V_Ni = 0, b_K_Di = 0, b_K_iN = 0, b_W_Di = 0;
+
   {
     Kernel1 kernel;
     Factor1 F;
@@ -170,6 +127,7 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
         dims_n, dims_n, ind_n, ind_n, kernel, F, F, nu, order);
     // a_V_ii(psi_i, pi_i)
     a_V_ii += -c * state_sol.psi_i.dot(mat * adj_sol.psi_i);
+    std::cout << "a_V_ii: " << a_V_ii << std::endl;
   }
 
   {
@@ -187,6 +145,11 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     b_V_Ni +=
         c * eta_interp.dot(
                 mat.block(dims_n.d, 0, dims_n.n, dims_n.i) * adj_sol.psi_i);
+    std::cout << "a_V_iD: " << a_V_iD << std::endl;
+    std::cout << "vec norm: " << state_sol.psi_i.norm() << std::endl;
+    std::cout << "mat norm: " << mat.block(0, 0, dims_n.d, dims_n.i).norm() << std::endl;
+    std::cout << "a_V_Di: " << a_V_Di << std::endl;
+    std::cout << "b_V_Ni: " << b_V_Ni << std::endl;
   }
 
   {
@@ -194,10 +157,12 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     Factor1 F;
     Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_n, space_d,
         dims_n, dims_d, ind_n, ind_d, kernel, F, F, nu, order);
-    // a_K_ii(u_i, pi_i)
-    a_K_ii_1 += c * adj_sol.psi_i.dot(mat * state_sol.u_i);
     // a_K_ii(rho_i, psi_i)
-    a_K_ii_2 += c * state_sol.psi_i.dot(mat * adj_sol.u_i);
+    a_K_ii_1 += c * state_sol.psi_i.dot(mat * adj_sol.u_i);
+    // a_K_ii(u_i, pi_i)
+    a_K_ii_2 += c * adj_sol.psi_i.dot(mat * state_sol.u_i);
+    std::cout << "a_K_ii_1: " << a_K_ii_1 << std::endl;
+    std::cout << "a_K_ii_2: " << a_K_ii_2 << std::endl;
   }
 
   {
@@ -214,6 +179,11 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     // b_K_iN(rho_i, eta)
     b_K_iN += c * eta_interp.dot(
                       mat.block(dims_n.d, 0, dims_n.n, dims_d.i) * adj_sol.u_i);
+    std::cout << "a_K_iD_1: " << a_K_iD_1 << std::endl;
+    std::cout << "a_K_iD_2: " << a_K_iD_2 << std::endl;
+    std::cout << "vec norm: " << state_sol.u_i.norm() << std::endl;
+    std::cout << "mat norm: " << mat.block(0, 0, dims_n.d, dims_d.i).norm() << std::endl;
+    std::cout << "b_K_iN: " << b_K_iN << std::endl;
   }
 
   {
@@ -232,7 +202,10 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     // b_K_Di(g, pi_i)
     b_K_Di +=
         c * g_interp.dot(
-                mat.block(0, 0, dims_d.d, dims_n.i) * state_sol.psi_i);
+                mat.block(0, 0, dims_d.d, dims_n.i) * adj_sol.psi_i);
+    std::cout << "a_K_Ni_1: " << a_K_Ni_1 << std::endl;
+    std::cout << "a_K_Ni_2: " << a_K_Ni_2 << std::endl;
+    std::cout << "b_K_Di: " << b_K_Di << std::endl;
   }
 
   {
@@ -242,6 +215,7 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
         dims_d, dims_d, ind_d, ind_d, kernel, F, F, nu, order);
     // a_W_ii(u_i, rho_i) term1
     a_W_ii += -c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    std::cout << "a_W_ii(1): " << a_W_ii << std::endl;
   }
 
   {
@@ -252,8 +226,10 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_ii(u_i, rho_i) term2
     a_W_ii += c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    std::cout << "a_W_ii(2): " << a_W_ii << std::endl;
     // a_W_ii(u_i, rho_i) term4
     a_W_ii += c * state_sol.u_i.dot(mat * adj_sol.u_i);
+    std::cout << "a_W_ii(4): " << a_W_ii << std::endl;
   }
 
   {
@@ -264,8 +240,10 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
         dims_d, dims_d, ind_d, ind_d, kernel, F, G, nu, order);
     // a_W_ii(u_i, rho_i) term3
     a_W_ii += c * adj_sol.u_i.dot(mat * state_sol.u_i);
+    std::cout << "a_W_ii(3): " << a_W_ii << std::endl;
     // a_W_ii(u_i, rho_i) term5
     a_W_ii += c * state_sol.u_i.dot(mat * adj_sol.u_i);
+    std::cout << "a_W_ii(5): " << a_W_ii << std::endl;
   }
 
   {
@@ -284,6 +262,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     // b_W_Di(g, rho_i) term1
     b_W_Di += -c * g_interp.dot(
                        mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    std::cout << "a_W_iN(1): " << a_W_iN << std::endl;
+    std::cout << "a_W_Ni(1): " << a_W_Ni << std::endl;
+    std::cout << "b_W_Di(1): " << b_W_Di << std::endl;
   }
 
   {
@@ -303,6 +284,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     // b_W_Di(g, rho_i) term2
     b_W_Di += -c * g_interp.dot(
                        mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    std::cout << "a_W_iN(2): " << a_W_iN << std::endl;
+    std::cout << "a_W_Ni(2): " << a_W_Ni << std::endl;
+    std::cout << "b_W_Di(2): " << b_W_Di << std::endl;
   }
 
   {
@@ -322,20 +306,15 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
     // b_W_Di(g, rho_i) term3
     b_W_Di += -c * g_interp.dot(
                        mat.block(0, 0, dims_d.d, dims_d.i) * adj_sol.u_i);
+    std::cout << "a_W_iN(3): " << a_W_iN << std::endl;
+    std::cout << "a_W_Ni(3): " << a_W_Ni << std::endl;
+    std::cout << "b_W_Di(3): " << b_W_Di << std::endl;
   }
 
-  {
-    Eigen::MatrixXd mat = ComputeMatrixJ(mesh, space_d, space_n,
-        dims_d, dims_n, ind_d, ind_n, nu, order);
-    // J(u_i, psi_i, u, psi)
-    J += 0.5 * (epsilon2 - epsilon1) *
-             state_sol.u_i.dot(mat * adj_sol.psi_i);
-  }
-
-  force = J
-      + (epsilon1 / epsilon2 + 1) * a_W_ii + 2 * a_K_ii_2 + a_W_Ni + a_K_iD_1
+  force =  
+      (epsilon1 / epsilon2 + 1) * a_W_ii + 2 * a_K_ii_1 + a_W_Ni + a_K_iD_1
       + b_W_Di + b_K_iN
-      + 2 * a_K_ii_1 - (epsilon2 / epsilon1 + 1) * a_V_ii + a_K_Ni_1 - a_V_Di
+      + 2 * a_K_ii_2 - (epsilon2 / epsilon1 + 1) * a_V_ii + a_K_Ni_1 - a_V_Di
       + b_K_Di - b_V_Ni
       + a_W_iN + a_K_Ni_2
       + a_K_iD_2 - a_V_iD;
@@ -378,7 +357,7 @@ double CalculateForce(const parametricbem2d::ParametrizedMesh &mesh,
   std::cout << adj_sol.psi << std::endl;
   */
   double force = ComputeShapeDerivative(mesh, space_d, space_n, nu, dir_sel,
-      g, eta, epsilon1, epsilon1, state_sol, adj_sol, order);
+      g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
       
   //std::cout << "force = " << force << std::endl;
   return force;
