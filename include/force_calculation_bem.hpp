@@ -72,17 +72,17 @@ Eigen::VectorXd SolveAdjoint(
   // Assemble RHS
   Eigen::VectorXd rhs = Eigen::VectorXd::Zero(lhs.rows());
   rhs.segment(dims_d.i + dims_n.i, dims_d.n) =
-      0.5 * epsilon2 * Slice(M, ind_n.n, ind_d.n).transpose()
+      0.5 * Slice(M, ind_n.n, ind_d.n).transpose()
           * InterpolateNeuData(mesh, eta, space_n, ind_n);
   rhs.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d) =
-      0.5 * epsilon2 * Slice(M, ind_n.d, ind_d.d)
+      0.5 * Slice(M, ind_n.d, ind_d.d)
           * InterpolateDirData(mesh, g, space_d, ind_d);
 
   // Solve LSE
   Eigen::HouseholderQR<Eigen::MatrixXd> dec(lhs);
   Eigen::VectorXd sol = dec.solve(rhs);
 
-  
+  /*
   std::cout << "\nrho_i" << std::endl;
   std::cout << sol.segment(0, dims_d.i) << std::endl;
   std::cout << "\npi_i" << std::endl;
@@ -90,9 +90,8 @@ Eigen::VectorXd SolveAdjoint(
   std::cout << "\nrho" << std::endl;
   std::cout << sol.segment(dims_d.i + dims_n.i, dims_d.n) << std::endl;
   std::cout << "\npi" << std::endl;
-  std::cout << sol.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d)
-            << std::endl;
-  
+  std::cout << sol.tail(dims_n.d) << std::endl;
+  */
 
   /*
   Eigen::MatrixXd rhs_mat(dims_d.i + dims_n.i + dims_d.n + dims_n.d,
@@ -140,8 +139,6 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
   Eigen::VectorXd g_interp = InterpolateDirData(mesh, g, space_d, ind_d);
   Eigen::VectorXd eta_interp = InterpolateNeuData(mesh, eta, space_n, ind_n);
 
-  double force = 0.0;
-
   Kernel1 kernel1;
   Kernel2 kernel2;
   LogKernel log_kernel;
@@ -156,9 +153,9 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
       dims_n.all, dims_d.all, kernel2, F1, F1, nu, order);
   Eigen::MatrixXd W =
       ComputeMatrix(mesh, space_d, space_d, dims_d.all, dims_d.all,
-                    kernel1, F2, F2, nu, order) +
+                    kernel1, F2, F2, nu, order) -
       ComputeMatrix(mesh, space_d, space_d, dims_d.all, dims_d.all,
-                    log_kernel, F3, F2, nu, order) +
+                    log_kernel, F3, F2, nu, order) -
       ComputeMatrix(mesh, space_d, space_d, dims_d.all, dims_d.all,
                     log_kernel, F4, F2, nu, order);
 
@@ -183,7 +180,7 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
            Eigen::MatrixXd::Zero(dims_n.d, dims_d.n + dims_n.d);
            
   Eigen::MatrixXd mat_b(dims_d.i + dims_n.i + dims_d.n + dims_n.d,
-                        dims_n.n + dims_d.d);
+                        dims_d.d + dims_n.n);
   mat_b << -Slice(W, ind_d.i, ind_d.d),
            -Slice(K, ind_n.n, ind_d.i).transpose(),
 
@@ -193,10 +190,55 @@ double ComputeShapeDerivative(const parametricbem2d::ParametrizedMesh &mesh,
            Eigen::MatrixXd::Zero(dims_d.n + dims_n.d, dims_d.d + dims_n.n);
 
   Eigen::VectorXd vec(dims_d.d + dims_n.n);
-  vec << InterpolateDirData(mesh, g, space_d, ind_d),
-         InterpolateNeuData(mesh, eta, space_n, ind_n);
+  vec << g_interp, eta_interp;
 
-  return adj_sol.dot(mat_a * state_sol - mat_b * vec);
+  /*
+  Eigen::VectorXd u_i = state_sol.segment(0, dims_d.i);
+  Eigen::VectorXd psi_i = state_sol.segment(dims_d.i, dims_n.i);
+  Eigen::VectorXd u = state_sol.segment(dims_d.i + dims_n.i, dims_d.n);
+  Eigen::VectorXd psi = state_sol.tail(dims_n.d);
+
+  Eigen::VectorXd rho_i = adj_sol.segment(0, dims_d.i);
+  Eigen::VectorXd pi_i = adj_sol.segment(dims_d.i, dims_n.i);
+  Eigen::VectorXd rho = adj_sol.segment(dims_d.i + dims_n.i, dims_d.n);
+  Eigen::VectorXd pi = adj_sol.tail(dims_n.d);
+
+  Eigen::MatrixXd res_a(4, 4);
+  res_a << rho_i.dot((epsilon1 / epsilon2 + 1) *
+                         Slice(W, ind_d.i, ind_d.i) * u_i),
+           rho_i.dot(2 * Slice(K, ind_n.i, ind_d.i).transpose() * psi_i),
+           rho_i.dot(Slice(W, ind_d.i, ind_d.n) * u),
+           rho_i.dot(Slice(K, ind_n.d, ind_d.i).transpose() * psi),
+           pi_i.dot(2 * Slice(K, ind_n.i, ind_d.i) * u_i),
+           pi_i.dot(-(epsilon2 / epsilon1 + 1) *
+                        Slice(V, ind_n.i, ind_n.i) * psi_i),
+           pi_i.dot(Slice(K, ind_n.i, ind_d.n) * u),
+           pi_i.dot(-Slice(V, ind_n.i, ind_n.d) * psi),
+           rho.dot(Slice(W, ind_d.n, ind_d.i) * u_i),
+           rho.dot(Slice(K, ind_n.i, ind_d.n).transpose() * psi_i),
+           0, 0,
+           pi.dot(Slice(K, ind_n.d, ind_d.i) * u_i),
+           pi.dot(-Slice(V, ind_n.d, ind_n.i) * psi_i),
+           0, 0;
+  Eigen::MatrixXd res_b(4, 2);
+  res_b << rho_i.dot(-Slice(W, ind_d.i, ind_d.d) * g_interp),
+           rho_i.dot(-Slice(K, ind_n.n, ind_d.i).transpose() * eta_interp),
+           pi_i.dot(-Slice(K, ind_n.i, ind_d.d) * g_interp),
+           pi_i.dot(Slice(V, ind_n.i, ind_n.n) * eta_interp),
+           0, 0, 0, 0;
+
+  std::cout << "block result" << std::endl;
+  std::cout << "mat_a:\n" << res_a << std::endl;
+  std::cout << "mat_b:\n" << res_b << std::endl;
+  std::cout << "sum row1: " << res_a.row(0).sum() - res_b.row(0).sum()
+            << std::endl;
+  std::cout << "sum row2: " << res_a.row(1).sum() - res_b.row(1).sum()
+            << std::endl;
+  std::cout << "sum col1: " << res_a.col(0).sum() << std::endl;
+  std::cout << "sum col2: " << res_a.col(1).sum() << std::endl;
+  */
+
+  return epsilon2 * adj_sol.dot(mat_a * state_sol - mat_b * vec);
 }
 
 double CalculateForce(const parametricbem2d::ParametrizedMesh &mesh,

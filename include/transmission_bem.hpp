@@ -269,6 +269,7 @@ Eigen::VectorXd Solve(
   Eigen::HouseholderQR<Eigen::MatrixXd> dec(lhs);
   Eigen::VectorXd sol = dec.solve(rhs_mat * rhs_vec);
 
+  /*
   std::cout << "\nu_i" << std::endl;
   std::cout << sol.segment(0, dims_d.i) << std::endl;
   std::cout << "\npsi_i" << std::endl;
@@ -276,8 +277,8 @@ Eigen::VectorXd Solve(
   std::cout << "\nu" << std::endl;
   std::cout << sol.segment(dims_d.i + dims_n.i, dims_d.n) << std::endl;
   std::cout << "\npsi" << std::endl;
-  std::cout << sol.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d)
-            << std::endl;
+  std::cout << sol.tail(dims_n.d) << std::endl;
+  */
 
   return sol;
 }
