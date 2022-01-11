@@ -1,3 +1,3 @@
 [submodule "external/2dparametricbem"]
 	path = external/2dparametricbem
-	url = git@gitlab.ethz.ch:ppanchal/2dparametricbem.git
+	url = https://gitlab.ethz.ch/ppanchal/2dparametricbem.git

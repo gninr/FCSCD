@@ -13,3 +13,4 @@ find_package(lehrfempp CONFIG REQUIRED)
 
 add_subdirectory(external/2dparametricbem)
 add_subdirectory(test)
+add_subdirectory(examples)

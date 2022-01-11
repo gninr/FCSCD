@@ -80,7 +80,7 @@ int main() {
       std::unique_ptr<lf::geometry::Geometry>(nullptr));
   std::shared_ptr<lf::mesh::Mesh> mesh_p = mesh_factory_ptr->Build();
 
-  const int reflevels = 9;
+  const int reflevels = 10;
   std::shared_ptr<lf::refinement::MeshHierarchy> multi_mesh_p =
       lf::refinement::GenerateMeshHierarchyByUniformRefinemnt(mesh_p,
                                                               reflevels);

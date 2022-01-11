@@ -8,16 +8,52 @@
 
 #include "continuous_space.hpp"
 #include "discontinuous_space.hpp"
-#include "parametrized_circular_arc.hpp"
+#include "parametrized_fourier_sum.hpp"
 #include "parametrized_line.hpp"
 #include "parametrized_mesh.hpp"
 #include <Eigen/Dense>
+
+Eigen::Vector2d exkite(double t) {
+  return Eigen::Vector2d(0.3+.35 * std::cos(t) + .1625 * std::cos(2 * t),
+                         0.5+.35 * std::sin(t));
+}
+
+Eigen::Vector2d exdkite(double t) {
+  return Eigen::Vector2d(-.35 * std::sin(t) - 2 * .1625 * std::sin(2 * t),
+                         .35 * std::cos(t));
+}
+
+Eigen::VectorXd get_kite_params(unsigned N) {
+  /*
+  // Calculating the length of the kite
+  unsigned N_length = 500; // No. of points used in the calculation
+  Eigen::VectorXd pts_length = Eigen::VectorXd::LinSpaced(N_length,0,2*M_PI);
+  double L = 0;
+  for (unsigned i = 0 ; i < N_length-1 ; ++i)
+    L += (exkite(pts_length(i)) - exkite(pts_length(i+1))).norm();
+
+  std::cout << "found length of the kite: " << L << std::endl;
+  */
+  double L = 2.46756;
+  // Solving the equation for Phi using explicit timestepping
+  unsigned k = 20; // multiplicity factor
+  double h = L/N/k; // step size
+  Eigen::VectorXd phi_full = Eigen::VectorXd::Constant(N*k,0);
+  Eigen::VectorXd phi = Eigen::VectorXd::Constant(N,0);
+  for (unsigned i = 1 ; i < N*k ; ++i)
+    phi_full(i) = phi_full(i-1) + h /(exdkite(phi_full(i-1))).norm();
+
+  for (unsigned i = 0 ; i < N ; ++i)
+    phi(i) = phi_full(i*k);
+
+  return phi;
+}
 
 int main() {
   std::cout << "Calculate force using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
 
-  std::ofstream out("square_bem.txt");
+  std::ofstream out("kite_bem.txt");
   out << "Calculate force using BEM" << std::endl;
   out << "####################################" << std::endl;
   // Gauss quadrature order
@@ -47,17 +83,6 @@ int main() {
   transmission_bem::NuConstant nu_x(Eigen::Vector2d(1., 0.), bdry_sel);
   transmission_bem::NuConstant nu_y(Eigen::Vector2d(0., 1.), bdry_sel);
 
-  // Inner square vertices
-  Eigen::Vector2d NE(1., 1.);
-  Eigen::Vector2d NW(0., 1.);
-  Eigen::Vector2d SE(1., 0.);
-  Eigen::Vector2d SW(0., 0.);
-  // Inner square edges
-  parametricbem2d::ParametrizedLine ir(NE, SE); // right
-  parametricbem2d::ParametrizedLine it(NW, NE); // top
-  parametricbem2d::ParametrizedLine il(SW, NW); // left
-  parametricbem2d::ParametrizedLine ib(SE, SW); // bottom
-
   // Outer square vertices
   Eigen::Vector2d NEo(2., 2.);
   Eigen::Vector2d NWo(-2., 2.);
@@ -69,7 +94,7 @@ int main() {
   parametricbem2d::ParametrizedLine ol(NWo, SWo); // left
   parametricbem2d::ParametrizedLine ob(SWo, SEo); // bottom
 
-  std::cout << "shape of inner dielectic: square" << std::endl;
+  std::cout << "shape of inner dielectic: kite" << std::endl;
   std::cout << "quadrature order: " << order << std::endl;
   std::cout << "epsilon1: " << epsilon1 << std::endl;
   std::cout << "epsilon2: " << epsilon2 << std::endl;
@@ -78,7 +103,7 @@ int main() {
             << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
-  out << "shape of inner dielectic: square" << std::endl;
+  out << "shape of inner dielectic: kite" << std::endl;
   out << "quadrature order: " << order << std::endl;
   out << "epsilon1: " << epsilon1 << std::endl;
   out << "epsilon2: " << epsilon2 << std::endl;
@@ -87,29 +112,41 @@ int main() {
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
-  for (unsigned numpanels = 1; numpanels <= 128; numpanels *= 2) {
+  // numpanels = Number of panels per unit
+  for (unsigned numpanels = 1; numpanels <= 512; numpanels *= 2) {
     unsigned temp = numpanels;
 
-    // Panels for the edges of inner square
-    parametricbem2d::PanelVector panels_ir(ir.split(temp));
-    parametricbem2d::PanelVector panels_ib(ib.split(temp));
-    parametricbem2d::PanelVector panels_il(il.split(temp));
-    parametricbem2d::PanelVector panels_it(it.split(temp));
+    parametricbem2d::PanelVector panels_kite;
+    double lkite = 2.46756; // length of kite
+    unsigned N = ceil(lkite * numpanels);
+    Eigen::VectorXd meshpts = get_kite_params(N);
+    Eigen::VectorXd tempp(N+1);
+    tempp << meshpts, 2*M_PI;
+    tempp = -tempp + Eigen::VectorXd::Constant(N+1,2*M_PI); // clockwise
+    //std::cout << "temp: " << tempp.transpose() << std::endl;
+    // Defining the kite domain
+    Eigen::MatrixXd cos_list_o(2, 2);
+    cos_list_o << .35, .1625, 0, 0;
+    Eigen::MatrixXd sin_list_o(2, 2);
+    sin_list_o << 0, 0, .35, 0;
+    for (unsigned i = 0 ; i < N ; ++i) {
+      panels_kite.push_back(
+          std::make_shared<parametricbem2d::ParametrizedFourierSum>(
+              Eigen::Vector2d(0.3, 0.5), cos_list_o, sin_list_o, 
+              tempp(i), tempp(i+1)));
+    }
+
+    // Meshing the sqkite equivalently in the parameter mesh
+    // Creating the ParametricMesh object
+    parametricbem2d::PanelVector panels;
 
     // Panels for the edges of outer square
     parametricbem2d::PanelVector panels_or(Or.split(4*temp));
     parametricbem2d::PanelVector panels_ot(ot.split(4*temp));
     parametricbem2d::PanelVector panels_ol(ol.split(4*temp));
     parametricbem2d::PanelVector panels_ob(ob.split(4*temp));
-    
-    // Creating the ParametricMesh object
-    parametricbem2d::PanelVector panels;
 
-    panels.insert(panels.end(), panels_ir.begin(), panels_ir.end());
-    panels.insert(panels.end(), panels_ib.begin(), panels_ib.end());
-    panels.insert(panels.end(), panels_il.begin(), panels_il.end());
-    panels.insert(panels.end(), panels_it.begin(), panels_it.end());
-
+    panels.insert(panels.end(), panels_kite.begin(), panels_kite.end());
     panels.insert(panels.end(), panels_or.begin(), panels_or.end());
     panels.insert(panels.end(), panels_ot.begin(), panels_ot.end());
     panels.insert(panels.end(), panels_ol.begin(), panels_ol.end());
