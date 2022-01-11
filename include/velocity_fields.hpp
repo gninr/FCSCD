@@ -3,6 +3,7 @@
 
 #include <Eigen/Dense>
 
+namespace transmission_bem {
 class AbstractVelocityField {
 public:
   virtual Eigen::Vector2d operator()(const Eigen::Vector2d &x) const = 0;
@@ -18,11 +19,14 @@ public:
 
 class NuConstant : public AbstractVelocityField {
 public:
-  NuConstant(const Eigen::Vector2d &direction) {
+  NuConstant(const Eigen::Vector2d &direction,
+             std::function<bool(Eigen::Vector2d)> bdry_sel)
+      : bdry_sel_{bdry_sel} {
     direction_ = direction.normalized();
   }
 
   Eigen::Vector2d operator()(const Eigen::Vector2d &x) const {
+    if (bdry_sel_(x)) return Eigen::Vector2d::Zero();
     return direction_;
   }
 
@@ -44,6 +48,7 @@ public:
 
 private:
   Eigen::Vector2d direction_;
+  std::function<bool(Eigen::Vector2d)> bdry_sel_;
 };
 
 class NuRotation : public AbstractVelocityField {
@@ -126,5 +131,6 @@ public:
     return M;
   }
 };
+} // namespace transmission_bem
 
 #endif // VELOCITYFIELDS

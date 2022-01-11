@@ -12,11 +12,6 @@
 #include <Eigen/Dense>
 
 namespace transmission_bem {
-
-struct Solution {
-  Eigen::VectorXd u_i, psi_i, u, psi;
-};
-
 Eigen::VectorXd Slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
   unsigned n = ind.size();
   Eigen::VectorXd res(n);
@@ -201,15 +196,16 @@ Eigen::VectorXd InterpolateNeuData(
   return Slice(eta_interp, ind.n);
 }
 
-Solution Solve(const parametricbem2d::ParametrizedMesh &mesh,
-               // Dirichlet trace space
-               const parametricbem2d::AbstractBEMSpace &space_d,
-               // Neumann trace space
-               const parametricbem2d::AbstractBEMSpace &space_n,
-               std::function<bool(Eigen::Vector2d)> dir_sel,
-               std::function<double(Eigen::Vector2d)> g,
-               std::function<double(Eigen::Vector2d)> eta,
-               double epsilon1, double epsilon2, unsigned order) {      
+Eigen::VectorXd Solve(
+    const parametricbem2d::ParametrizedMesh &mesh,
+    // Dirichlet trace space
+    const parametricbem2d::AbstractBEMSpace &space_d,
+    // Neumann trace space
+    const parametricbem2d::AbstractBEMSpace &space_n,
+    std::function<bool(Eigen::Vector2d)> dir_sel,
+    std::function<double(Eigen::Vector2d)> g,
+    std::function<double(Eigen::Vector2d)> eta,
+    double epsilon1, double epsilon2, unsigned order) {      
   // Compute Space Information
   Dims dims_d, dims_n;
   Indices ind_d, ind_n;
@@ -271,14 +267,18 @@ Solution Solve(const parametricbem2d::ParametrizedMesh &mesh,
 
   // Solve LSE
   Eigen::HouseholderQR<Eigen::MatrixXd> dec(lhs);
-  Eigen::VectorXd sol_vec = dec.solve(rhs_mat * rhs_vec);
+  Eigen::VectorXd sol = dec.solve(rhs_mat * rhs_vec);
 
-  // Construct solution
-  Solution sol;
-  sol.u_i = sol_vec.segment(0, dims_d.i);
-  sol.psi_i = sol_vec.segment(dims_d.i, dims_n.i);
-  sol.u = sol_vec.segment(dims_d.i + dims_n.i, dims_d.n);
-  sol.psi = sol_vec.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d);
+  std::cout << "\nu_i" << std::endl;
+  std::cout << sol.segment(0, dims_d.i) << std::endl;
+  std::cout << "\npsi_i" << std::endl;
+  std::cout << sol.segment(dims_d.i, dims_n.i) << std::endl;
+  std::cout << "\nu" << std::endl;
+  std::cout << sol.segment(dims_d.i + dims_n.i, dims_d.n) << std::endl;
+  std::cout << "\npsi" << std::endl;
+  std::cout << sol.segment(dims_d.i + dims_n.i + dims_d.n, dims_n.d)
+            << std::endl;
+
   return sol;
 }
 } // namespace transmission_bem

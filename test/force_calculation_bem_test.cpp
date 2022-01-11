@@ -16,14 +16,14 @@ int main(int argc, char *argv[]) {
   std::cout << "Calculate force using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
   // Gauss quadrature order
-  unsigned order = 8;
+  unsigned order = 16;
   std::cout << "Gauss Quadrature used with order = " << order << std::endl;
 
   // Inner square vertices
-  Eigen::Vector2d NE(1, 1);
-  Eigen::Vector2d NW(-1, 1);
-  Eigen::Vector2d SE(1, -1);
-  Eigen::Vector2d SW(-1, -1);
+  Eigen::Vector2d NE(0.5, 0.5);
+  Eigen::Vector2d NW(0, 0.5);
+  Eigen::Vector2d SE(0.5, 0);
+  Eigen::Vector2d SW(0, 0);
   // Inner square edges
   parametricbem2d::ParametrizedLine ir(NE, SE); // right
   parametricbem2d::ParametrizedLine it(NW, NE); // top
@@ -118,14 +118,19 @@ int main(int argc, char *argv[]) {
     return 0;
   };
 
-  auto dir_sel = [](const Eigen::Vector2d& x) {
+  auto dir_sel = [](Eigen::Vector2d x) {
     return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7);
+  };
+
+  auto bdry_sel = [](Eigen::Vector2d x) {
+    return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7 ||
+            x[1] - 2. > -1e-7 || x[1] + 2. < 1e-7);
   };
 
   parametricbem2d::ContinuousSpace<1> space_d;
   parametricbem2d::DiscontinuousSpace<0> space_n;
-  NuConstant nu_x(Eigen::Vector2d(1., 0.));
-  NuConstant nu_y(Eigen::Vector2d(0., 1.));
+  transmission_bem::NuConstant nu_x(Eigen::Vector2d(1., 0.), bdry_sel);
+  transmission_bem::NuConstant nu_y(Eigen::Vector2d(0., 1.), bdry_sel);
 
   Eigen::Vector2d force;
   force[0] = transmission_bem::CalculateForce(mesh, space_d, space_n, nu_x,

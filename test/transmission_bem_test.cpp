@@ -80,17 +80,8 @@ int main() {
 
   parametricbem2d::ContinuousSpace<1> space_d;
   parametricbem2d::DiscontinuousSpace<0> space_n;
-  transmission_bem::Solution sol = transmission_bem::Solve(
+  Eigen::VectorXd sol = transmission_bem::Solve(
       mesh, space_d, space_n, dir_sel, g, eta, epsilon1, epsilon2, order);
-
-  std::cout << "\nu_i" << std::endl;
-  std::cout << sol.u_i << std::endl;
-  std::cout << "\npsi_i" << std::endl;
-  std::cout << sol.psi_i << std::endl;
-  std::cout << "\nu" << std::endl;
-  std::cout << sol.u << std::endl;
-  std::cout << "\npsi" << std::endl;
-  std::cout << sol.psi << std::endl;
 
   return 0;
 }

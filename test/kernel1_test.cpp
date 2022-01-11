@@ -19,7 +19,8 @@ double tol = transmission_bem::tol;
 Eigen::MatrixXd EvaluateSecond(const parametricbem2d::ParametrizedMesh &mesh,
                       const transmission_bem::Dims &dims,
                       const transmission_bem::Indices &ind,
-                      const AbstractVelocityField &nu, unsigned order) {
+                      const transmission_bem::AbstractVelocityField &nu,
+                      unsigned order) {
   // The BEM space used for solving the state and adjoint problems
   parametricbem2d::DiscontinuousSpace<0> space;
   // Getting the panels
@@ -210,7 +211,7 @@ int main() {
   parametricbem2d::ParametrizedLine ol(NWo, SWo); // left
   parametricbem2d::ParametrizedLine ob(SWo, SEo); // bottom
   
-  unsigned nsplit = 32;
+  unsigned nsplit = 8;
 
   // Panels for the edges of the inner square
   parametricbem2d::PanelVector panels_ir(ir.split(nsplit));
@@ -251,7 +252,7 @@ int main() {
   };
 
   parametricbem2d::DiscontinuousSpace<0> space_n;
-  NuRadial nu;
+  transmission_bem::NuRadial nu;
 
   // Compute Space Information
   transmission_bem::Dims dims_n;
@@ -261,9 +262,12 @@ int main() {
 
   transmission_bem::Kernel1 kernel;
   transmission_bem::Factor1 F;
-  Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_n, space_n,
-      dims_n, dims_n, ind_n, ind_n, kernel, F, F, nu, order);
-  Eigen::MatrixXd mat_ref = EvaluateSecond(mesh, dims_n, ind_n, nu, order);
+  Eigen::MatrixXd mat = transmission_bem::Slice(
+      transmission_bem::ComputeMatrix(mesh, space_n, space_n,
+          dims_n.all, dims_n.all, kernel, F, F, nu, order),
+      ind_n.i, ind_n.i);
+  Eigen::MatrixXd mat_ref =
+      transmission_bem::c * EvaluateSecond(mesh, dims_n, ind_n, nu, order);
 
   // std::cout << "mat =\n" << mat << std::endl;
   // std::cout << "mat_ref =\n" << mat_ref << std::endl;

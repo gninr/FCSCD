@@ -82,7 +82,7 @@ int main() {
   };
 
   parametricbem2d::DiscontinuousSpace<0> space_n;
-  NuRadial nu;
+  transmission_bem::NuRadial nu;
 
   // Compute Space Information
   transmission_bem::Dims dims_n;
@@ -92,8 +92,10 @@ int main() {
 
   transmission_bem::LogKernel kernel;
   transmission_bem::Factor1 F;
-  Eigen::MatrixXd mat = ComputeSingularMatrix(mesh, space_n, space_n,
-      dims_n, dims_n, ind_n, ind_n, kernel, F, F, nu, order) / (-2. * M_PI);
+  Eigen::MatrixXd mat = transmission_bem::Slice(
+      transmission_bem::ComputeMatrix(mesh, space_n, space_n,
+          dims_n.all, dims_n.all, kernel, F, F, nu, order),
+      ind_n.i, ind_n.i);
   Eigen::MatrixXd mat_ref =
       parametricbem2d::single_layer::GalerkinMatrix(mesh, space_n, order);
   Eigen::MatrixXd mat_ref_ii =
