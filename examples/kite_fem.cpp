@@ -135,6 +135,7 @@ int main() {
               << std::setw(25) << force[0]
               << std::setw(25) << force[1] << std::endl;
 
+    out.precision(std::numeric_limits<double>::digits10);
     out << std::setw(10) << (1 << (level-2))
         << std::setw(25) << force[0]
         << std::setw(25) << force[1] << std::endl;
