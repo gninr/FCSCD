@@ -122,7 +122,7 @@ int main() {
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
-  for (int level = 2; level <= reflevels; ++level) {
+  for (int level = 4; level <= reflevels; ++level) {
     mesh_p = multi_mesh_p->getMesh(level);
     auto fe_space =
         std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);

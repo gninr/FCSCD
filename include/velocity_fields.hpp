@@ -105,7 +105,7 @@ public:
     double x = X(0);
     double y = X(1);
     Eigen::Matrix2d M;
-    M << 1 + 2 * x, 2 * x, 2 * y, 1 + 2 * y;
+    M << 1 + 2 * x, 2 * y, 2 * x, 1 + 2 * y;
     return M;
   }
 

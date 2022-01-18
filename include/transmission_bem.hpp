@@ -12,7 +12,7 @@
 #include <Eigen/Dense>
 
 namespace transmission_bem {
-Eigen::VectorXd Slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
+Eigen::VectorXd Slice(const Eigen::VectorXd &v, const Eigen::ArrayXi &ind) {
   unsigned n = ind.size();
   Eigen::VectorXd res(n);
   for (unsigned i = 0; i < n; ++i) {
@@ -21,9 +21,9 @@ Eigen::VectorXd Slice(Eigen::VectorXd v, Eigen::ArrayXi ind) {
   return res;
 }
 
-Eigen::MatrixXd Slice(Eigen::MatrixXd A,
-                      Eigen::ArrayXi ind_row,
-                      Eigen::ArrayXi ind_col) {
+Eigen::MatrixXd Slice(const Eigen::MatrixXd &A,
+                      const Eigen::ArrayXi &ind_row,
+                      const Eigen::ArrayXi &ind_col) {
   unsigned num_rows = ind_row.size();
   unsigned num_cols = ind_col.size();
   Eigen::MatrixXd res(num_rows, num_cols);
@@ -52,7 +52,7 @@ struct Indices {
 void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
                          const parametricbem2d::AbstractBEMSpace &space,
                          std::function<bool(Eigen::Vector2d)> dir_sel,
-                         Dims *dims, Indices *ind) {
+                         Dims &dims, Indices &ind) {
   // Get panels
   parametricbem2d::PanelVector panels = mesh.getPanels();
   // Count number of panels
@@ -62,7 +62,7 @@ void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
   unsigned q = space.getQ();
   // Space dimension
   unsigned dim = space.getSpaceDim(numpanels);
-  dims->all = dim;
+  dims.all = dim;
 
   // Mark global shape functions associated with different type of panels
   Eigen::ArrayXi space_sel_i(Eigen::VectorXi::Zero(dim));
@@ -88,33 +88,35 @@ void ComputeDirSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
 
   // Compute number of global shape functions associated with
   // different type of panels
-  dims->i = space_sel_i.sum();
-  dims->d = space_sel_d.sum();
-  dims->n = dim - dims->i - dims->d;
+  dims.i = space_sel_i.sum();
+  dims.d = space_sel_d.sum();
+  dims.n = dim - dims.i - dims.d;
   // Compute indices of global shape functions associated with
   // different type of panels
-  ind->i = Eigen::ArrayXi(dims->i);
-  ind->d = Eigen::ArrayXi(dims->d);
-  ind->n = Eigen::ArrayXi(dims->n);
+  ind.i = Eigen::ArrayXi(dims.i);
+  ind.d = Eigen::ArrayXi(dims.d);
+  ind.n = Eigen::ArrayXi(dims.n);
   unsigned curr_i = 0, curr_n = 0, curr_d = 0;
   for (unsigned i = 0; i < dim; ++i) {
     if (space_sel_i[i]) {
-      ind->i[curr_i++] = i;
+      ind.i[curr_i++] = i;
     }
     else if (space_sel_d[i]) {
-      ind->d[curr_d++] = i;
+      ind.d[curr_d++] = i;
     }
     else {
-      ind->n[curr_n++] = i;
+      ind.n[curr_n++] = i;
     }
   }
+
+  return;
 }
 
 // Preprocessing of Neumann trace space
 void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
                          const parametricbem2d::AbstractBEMSpace &space,
                          std::function<bool(Eigen::Vector2d)> dir_sel,
-                         Dims *dims, Indices *ind) {
+                         Dims &dims, Indices &ind) {
   // Get panels
   parametricbem2d::PanelVector panels = mesh.getPanels();
   // Count number of panels
@@ -124,7 +126,7 @@ void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
   unsigned q = space.getQ();
   // Space dimension
   unsigned dim = space.getSpaceDim(numpanels);
-  dims->all = dim;
+  dims.all = dim;
 
   // Mark global shape functions associated with different type of panels
   Eigen::ArrayXi space_sel_i = Eigen::VectorXi::Zero(dim);
@@ -150,26 +152,28 @@ void ComputeNeuSpaceInfo(const parametricbem2d::ParametrizedMesh &mesh,
 
   // Compute number of global shape functions associated with
   // different type of panels
-  dims->i = space_sel_i.sum();
-  dims->n = space_sel_n.sum();
-  dims->d = dim - dims->i - dims->n;
+  dims.i = space_sel_i.sum();
+  dims.n = space_sel_n.sum();
+  dims.d = dim - dims.i - dims.n;
   // Compute indices of global shape functions associated with
   // different type of panels
-  ind->i = Eigen::ArrayXi(dims->i);
-  ind->n = Eigen::ArrayXi(dims->n);
-  ind->d = Eigen::ArrayXi(dims->d);
+  ind.i = Eigen::ArrayXi(dims.i);
+  ind.n = Eigen::ArrayXi(dims.n);
+  ind.d = Eigen::ArrayXi(dims.d);
   unsigned curr_i = 0, curr_n = 0, curr_d = 0;
   for (unsigned i = 0; i < dim; ++i) {
     if (space_sel_i[i]) {
-      ind->i[curr_i++] = i;
+      ind.i[curr_i++] = i;
     }
     else if (space_sel_n[i]) {
-      ind->n[curr_n++] = i;
+      ind.n[curr_n++] = i;
     }
     else {
-      ind->d[curr_d++] = i;
+      ind.d[curr_d++] = i;
     }
   }
+
+  return;
 }
 
 // Interpolate Dirichlet data in Dirichlet trace space
@@ -209,8 +213,8 @@ Eigen::VectorXd Solve(
   // Compute Space Information
   Dims dims_d, dims_n;
   Indices ind_d, ind_n;
-  ComputeDirSpaceInfo(mesh, space_d, dir_sel, &dims_d, &ind_d);
-  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, &dims_n, &ind_n);
+  ComputeDirSpaceInfo(mesh, space_d, dir_sel, dims_d, ind_d);
+  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
 
   // Get Galerkin matrices
   Eigen::MatrixXd M = parametricbem2d::MassMatrix(

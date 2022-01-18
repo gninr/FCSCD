@@ -1,6 +1,8 @@
 #include "force_calculation_bem.hpp"
 
 #include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
 
@@ -15,9 +17,15 @@
 int main(int argc, char *argv[]) {
   std::cout << "Calculate force using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
+
+  std::ofstream out("bem_test.txt");
+  out << "Calculate force using BEM" << std::endl;
+  out << "####################################" << std::endl;
+
   // Gauss quadrature order
   unsigned order = 8;
   std::cout << "Gauss Quadrature used with order = " << order << std::endl;
+  out << "Gauss Quadrature used with order = " << order << std::endl;
 
   // Outer square vertices
   Eigen::Vector2d NEo(2., 2.);
@@ -33,10 +41,10 @@ int main(int argc, char *argv[]) {
   unsigned nsplit = 8;
 
   // Panels for the edges of outer square
-  parametricbem2d::PanelVector panels_or(Or.split(2*nsplit));
-  parametricbem2d::PanelVector panels_ot(ot.split(2*nsplit));
-  parametricbem2d::PanelVector panels_ol(ol.split(2*nsplit));
-  parametricbem2d::PanelVector panels_ob(ob.split(2*nsplit));
+  parametricbem2d::PanelVector panels_or(Or.split(4*nsplit));
+  parametricbem2d::PanelVector panels_ot(ot.split(4*nsplit));
+  parametricbem2d::PanelVector panels_ol(ol.split(4*nsplit));
+  parametricbem2d::PanelVector panels_ob(ob.split(4*nsplit));
 
   // Creating the ParametricMesh object
   parametricbem2d::PanelVector panels;
@@ -111,39 +119,25 @@ int main(int argc, char *argv[]) {
 
   double epsilon1 = 1., epsilon2 = 100.;
 
-  auto g = [](Eigen::Vector2d x) {
-    return 2. - x[0];
-  };
+  transmission_bem::G_CONST g([](Eigen::Vector2d x) { return 2. - x[0]; });
 
-  auto eta = [](Eigen::Vector2d x) {
-    return 0;
-  };
-
-  auto dir_sel = [](Eigen::Vector2d x) {
-    return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7);
-  };
+  transmission_bem::ETA_CONST eta([](Eigen::Vector2d x) { return 0; });
 
   auto bdry_sel = [](Eigen::Vector2d x) {
     return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7 ||
             x[1] - 2. > -1e-7 || x[1] + 2. < 1e-7);
   };
 
-  parametricbem2d::ContinuousSpace<1> space_d;
-  parametricbem2d::DiscontinuousSpace<1> space_n;
-  transmission_bem::NuConstant nu_x(Eigen::Vector2d(1., 0.), bdry_sel);
-  transmission_bem::NuConstant nu_y(Eigen::Vector2d(0., 1.), bdry_sel);
+  auto dir_sel = [](Eigen::Vector2d x) {
+    return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7);
+  };
 
-  Eigen::Vector2d force;
-  std::cout << "------------------------------------" << std::endl;
-  std::cout << "Calculating Fx\n" << std::endl;
-  force[0] = transmission_bem::CalculateForce(mesh, space_d, space_n, nu_x,
-                 dir_sel, g, eta, epsilon1, epsilon2, order);
-  std::cout << "------------------------------------" << std::endl;
-  std::cout << "Calculating Fy\n" << std::endl;
-  force[1] = transmission_bem::CalculateForce(mesh, space_d, space_n, nu_y,
-                 dir_sel, g, eta, epsilon1, epsilon2, order);
-  std::cout << "------------------------------------" << std::endl;
-  std::cout << "force = (" << force[0] << ", " << force[1] << ")" << std::endl;
+  parametricbem2d::ContinuousSpace<1> space_d;
+  parametricbem2d::DiscontinuousSpace<0> space_n;
+
+  double force = transmission_bem::CalculateForce(mesh, space_d, space_n,
+      bdry_sel, dir_sel, g, eta, epsilon1, epsilon2, order, out);
+  std::cout << "magnitude of force: " << force << std::endl;
 
   return 0;
 }

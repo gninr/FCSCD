@@ -257,8 +257,7 @@ int main() {
   // Compute Space Information
   transmission_bem::Dims dims_n;
   transmission_bem::Indices ind_n;
-  transmission_bem::ComputeNeuSpaceInfo(
-      mesh, space_n, dir_sel, &dims_n, &ind_n);
+  transmission_bem::ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
 
   transmission_bem::Kernel1 kernel;
   transmission_bem::Factor1 F;
