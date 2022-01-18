@@ -3,6 +3,10 @@
 
 #include "transmission_fem.hpp"
 
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+
 #include <lf/fe/fe.h>
 #include <lf/mesh/utils/utils.h>
 #include <lf/uscalfe/uscalfe.h>
@@ -15,7 +19,8 @@ Eigen::Vector2d CalculateForce(
     std::function<double(Eigen::Vector2d)> g,
     std::function<double(Eigen::Vector2d)> eta,
     std::function<Eigen::Matrix2d(Eigen::Vector2d)> epsilon,
-    std::function<Eigen::Vector2d(Eigen::Vector2d)> grad_w) {
+    std::function<Eigen::Vector2d(Eigen::Vector2d)> grad_w,
+    std::ofstream &out) {
 
   Eigen::VectorXd sol = Solve(fe_space, dir_sel, g, eta, epsilon);
 
@@ -51,6 +56,13 @@ Eigen::Vector2d CalculateForce(
                mf_grad_sol -
            mf_c * lf::mesh::utils::squaredNorm(mf_grad_sol) * mf_grad_w),
       2);
+
+  std::cout << std::setw(50) << force[0]
+            << std::setw(25) << force[1] << std::endl;
+
+  out << std::setw(50) << force[0]
+      << std::setw(25) << force[1] << std::endl;
+
   return force;
 }
 } // namespace transmission_fem

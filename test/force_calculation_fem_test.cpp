@@ -1,5 +1,6 @@
 #include "force_calculation_fem.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <math.h>
 #include <lf/geometry/geometry.h>
@@ -13,6 +14,10 @@ int main() {
   
   std::cout << "Calculate force using FEM" << std::endl;
   std::cout << "####################################" << std::endl;
+  
+  std::ofstream out("fem_test.txt");
+  out << "Calculate force using FEM" << std::endl;
+  out << "####################################" << std::endl;
 
   double epsilon1 = 1.;
   double epsilon2 = 100.;
@@ -81,9 +86,7 @@ int main() {
       std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
 
   Eigen::Vector2d force = transmission_fem::CalculateForce(
-                              fe_space, dir_sel, g, eta, epsilon, grad_w);
-
-  std::cout << "force = (" << force[0] << ", " << force[1] << ")" << std::endl;
+      fe_space, dir_sel, g, eta, epsilon, grad_w, out);
 
   return 0;
 }

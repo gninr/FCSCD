@@ -80,7 +80,7 @@ int main() {
       std::unique_ptr<lf::geometry::Geometry>(nullptr));
   std::shared_ptr<lf::mesh::Mesh> mesh_p = mesh_factory_ptr->Build();
 
-  const int reflevels = 10;
+  const int reflevels = 9;
   std::shared_ptr<lf::refinement::MeshHierarchy> multi_mesh_p =
       lf::refinement::GenerateMeshHierarchyByUniformRefinemnt(mesh_p,
                                                               reflevels);
@@ -90,6 +90,7 @@ int main() {
   std::cout << "epsilon2: " << epsilon2 << std::endl;
   std::cout << "------------------------------------" << std::endl;
   std::cout << std::setw(10) << "1/h"
+            << std::setw(25) << "Volume Formula"
             << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
@@ -98,6 +99,7 @@ int main() {
   out << "epsilon2: " << epsilon2 << std::endl;
   out << "------------------------------------" << std::endl;
   out << std::setw(10) << "1/h"
+      << std::setw(25) << "Volume Formula"
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
@@ -106,18 +108,14 @@ int main() {
     auto fe_space =
         std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
 
-    Eigen::Vector2d force = transmission_fem::CalculateForce(
-                                fe_space, dir_sel, g, eta, epsilon, grad_w);
-
     std::cout.precision(std::numeric_limits<double>::digits10);
-    std::cout << std::setw(10) << (1 << (level-2))
-              << std::setw(25) << force[0]
-              << std::setw(25) << force[1] << std::endl;
+    std::cout << std::setw(10) << (1 << (level-2));
 
     out.precision(std::numeric_limits<double>::digits10);
-    out << std::setw(10) << (1 << (level-2))
-        << std::setw(25) << force[0]
-        << std::setw(25) << force[1] << std::endl;
+    out << std::setw(10) << (1 << (level-2));
+
+    Eigen::Vector2d force = transmission_fem::CalculateForce(
+        fe_space, dir_sel, g, eta, epsilon, grad_w, out);
   }
 
   return 0;

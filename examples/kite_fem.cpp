@@ -5,10 +5,9 @@
 #include <iostream>
 #include <math.h>
 
-#include <lf/geometry/geometry.h>
 #include <lf/fe/fe.h>
+#include <lf/io/io.h>
 #include <lf/mesh/hybrid2d/hybrid2d.h>
-#include <lf/refinement/refinement.h>
 #include <lf/uscalfe/uscalfe.h>
 
 int main() {
@@ -81,36 +80,12 @@ int main() {
     return res;
   };
 
-  // Generate mesh
-  std::shared_ptr<lf::mesh::hybrid2d::MeshFactory> mesh_factory_ptr =
-      std::make_shared<lf::mesh::hybrid2d::MeshFactory>(2);
-  std::array<std::array<double, 2>, 4> node_coord{
-    std::array<double, 2>({ 2.,  2.}),
-    std::array<double, 2>({-2.,  2.}),
-    std::array<double, 2>({-2., -2.}),
-    std::array<double, 2>({ 2., -2.})
-  };
-  for (const auto& node : node_coord) {
-    mesh_factory_ptr->AddPoint(Eigen::Vector2d({node[0], node[1]}));
-  }
-  mesh_factory_ptr->AddEntity(
-      lf::base::RefEl::kTria(), std::vector<size_type>({0, 1, 3}),
-      std::unique_ptr<lf::geometry::Geometry>(nullptr));
-  mesh_factory_ptr->AddEntity(
-      lf::base::RefEl::kTria(), std::vector<size_type>({1, 2, 3}),
-      std::unique_ptr<lf::geometry::Geometry>(nullptr));
-  std::shared_ptr<lf::mesh::Mesh> mesh_p = mesh_factory_ptr->Build();
-
-  const int reflevels = 10;
-  std::shared_ptr<lf::refinement::MeshHierarchy> multi_mesh_p =
-      lf::refinement::GenerateMeshHierarchyByUniformRefinemnt(mesh_p,
-                                                              reflevels);
-
   std::cout << "shape of inner dielectic: kite" << std::endl;
   std::cout << "epsilon1: " << epsilon1 << std::endl;
   std::cout << "epsilon2: " << epsilon2 << std::endl;
   std::cout << "------------------------------------" << std::endl;
   std::cout << std::setw(10) << "1/h"
+            << std::setw(25) << "Volume Formula"
             << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
@@ -119,26 +94,30 @@ int main() {
   out << "epsilon2: " << epsilon2 << std::endl;
   out << "------------------------------------" << std::endl;
   out << std::setw(10) << "1/h"
+      << std::setw(25) << "Volume Formula"
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
+  
+  std::shared_ptr<const lf::mesh::Mesh> mesh_p;
 
-  for (int level = 4; level <= reflevels; ++level) {
-    mesh_p = multi_mesh_p->getMesh(level);
+  for (int level = 4; level <= 9; ++level) {
+    // Load mesh
+    std::string mesh_file = "../../examples/meshes/kite_sq" + 
+                            std::to_string(level) + ".msh";
+    auto mesh_factory = std::make_unique<lf::mesh::hybrid2d::MeshFactory>(2);
+    const lf::io::GmshReader reader(std::move(mesh_factory), mesh_file);
+    mesh_p = reader.mesh();
     auto fe_space =
         std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
 
-    Eigen::Vector2d force = transmission_fem::CalculateForce(
-                                fe_space, dir_sel, g, eta, epsilon, grad_w);
-
     std::cout.precision(std::numeric_limits<double>::digits10);
-    std::cout << std::setw(10) << (1 << (level-2))
-              << std::setw(25) << force[0]
-              << std::setw(25) << force[1] << std::endl;
+    std::cout << std::setw(10) << (1 << (level-2));
 
     out.precision(std::numeric_limits<double>::digits10);
-    out << std::setw(10) << (1 << (level-2))
-        << std::setw(25) << force[0]
-        << std::setw(25) << force[1] << std::endl;
+    out << std::setw(10) << (1 << (level-2));
+    
+    Eigen::Vector2d force = transmission_fem::CalculateForce(
+        fe_space, dir_sel, g, eta, epsilon, grad_w, out);
   }
 
   return 0;

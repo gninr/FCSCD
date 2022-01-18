@@ -17,3 +17,5 @@ target_link_libraries(square_bem adj_double_layer double_layer hypersingular par
 target_link_libraries(square_fem LF::lf.mesh.hybrid2d LF::lf.refinement LF::lf.uscalfe)
 target_link_libraries(kite_bem adj_double_layer double_layer hypersingular parametrizations quadrature single_layer)
 target_link_libraries(kite_fem LF::lf.mesh.hybrid2d LF::lf.refinement LF::lf.uscalfe)
+
+add_subdirectory(meshes)
