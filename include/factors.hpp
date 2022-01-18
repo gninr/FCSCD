@@ -341,11 +341,9 @@ public:
       const parametricbem2d::AbstractBEMSpace &space,
       const AbstractVelocityField &nu, unsigned q, double s) const {
     Eigen::Vector2d x = pi(s);
-    Eigen::Vector2d tangent = pi.Derivative(s);
-    tangent /= tangent.norm();
     Eigen::Vector2d grad =
         nu.grad(x).transpose() * grad_g_(x) + hess_g_(x).transpose() * nu(x);
-    return  grad.dot(tangent);
+    return  grad.dot(pi.Derivative(s));
   }
 
 private:

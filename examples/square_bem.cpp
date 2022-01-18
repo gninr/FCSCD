@@ -68,6 +68,10 @@ int main() {
   std::cout << "epsilon2: " << epsilon2 << std::endl;
   std::cout << "------------------------------------" << std::endl;
   std::cout << std::setw(10) << "1/h"
+            << std::setw(25) << "Pullback"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy"
+            << std::setw(25) << "Stress Tensor"
             << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
@@ -77,10 +81,14 @@ int main() {
   out << "epsilon2: " << epsilon2 << std::endl;
   out << "------------------------------------" << std::endl;
   out << std::setw(10) << "1/h"
+      << std::setw(25) << "Pullback"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy"
+      << std::setw(25) << "Stress Tensor"
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
-  for (unsigned numpanels = 4; numpanels <= 512; numpanels *= 2) {
+  for (unsigned numpanels = 4; numpanels <= 256; numpanels *= 2) {
     unsigned temp = numpanels;
 
     // Panels for the edges of inner square
@@ -109,7 +117,7 @@ int main() {
     panels.insert(panels.end(), panels_ob.begin(), panels_ob.end());
 
     parametricbem2d::ParametrizedMesh mesh(panels);
-    
+
     std::cout.precision(std::numeric_limits<double>::digits10);
     std::cout << std::setw(10) << temp;
     

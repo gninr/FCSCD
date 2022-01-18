@@ -402,7 +402,7 @@ Eigen::VectorXd EvaluateExtraTerm(
     const parametricbem2d::ParametrizedMesh &mesh,
     const parametricbem2d::AbstractBEMSpace &space_d,
     const parametricbem2d::AbstractBEMSpace &space_n,
-    unsigned dim, Eigen::ArrayXi &ind_sel,
+    unsigned dim, const Eigen::ArrayXi &ind_sel,
     const AbstractFactor &F,
     const AbstractVelocityField &nu, unsigned order) {
   parametricbem2d::PanelVector panels = mesh.getPanels();

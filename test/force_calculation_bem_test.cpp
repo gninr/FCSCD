@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
   parametricbem2d::ParametrizedLine ol(NWo, SWo); // left
   parametricbem2d::ParametrizedLine ob(SWo, SEo); // bottom
   
-  unsigned nsplit = 8;
+  unsigned nsplit = 16;
 
   // Panels for the edges of outer square
   parametricbem2d::PanelVector panels_or(Or.split(4*nsplit));
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
       center << 0.0, 0.0;
     }
     
-    parametricbem2d::ParametrizedCircularArc icirc(center, r, 0., 2. * M_PI);
+    parametricbem2d::ParametrizedCircularArc icirc(center, r, 2. * M_PI, 0.);
     parametricbem2d::PanelVector panels_i(icirc.split(4*nsplit));
     panels.insert(panels.end(), panels_i.begin(), panels_i.end());
   }
@@ -135,9 +135,8 @@ int main(int argc, char *argv[]) {
   parametricbem2d::ContinuousSpace<1> space_d;
   parametricbem2d::DiscontinuousSpace<0> space_n;
 
-  double force = transmission_bem::CalculateForce(mesh, space_d, space_n,
-      bdry_sel, dir_sel, g, eta, epsilon1, epsilon2, order, out);
-  std::cout << "magnitude of force: " << force << std::endl;
+  Eigen::Vector2d force = transmission_bem::CalculateForce(mesh, space_d,
+      space_n, bdry_sel, dir_sel, g, eta, epsilon1, epsilon2, order, out);
 
   return 0;
 }

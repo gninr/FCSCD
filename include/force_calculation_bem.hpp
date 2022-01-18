@@ -28,17 +28,12 @@ void SolveStateAndAdjoint(
     const parametricbem2d::ParametrizedMesh &mesh,
     const parametricbem2d::AbstractBEMSpace &space_d,
     const parametricbem2d::AbstractBEMSpace &space_n,
-    std::function<bool(Eigen::Vector2d)> dir_sel,
+    const Dims &dims_d, const Dims &dims_n,
+    const Indices &ind_d, const Indices &ind_n,
     std::function<double(Eigen::Vector2d)> g,
     std::function<double(Eigen::Vector2d)> eta,
     double epsilon1, double epsilon2, unsigned order,
     Eigen::VectorXd &state_sol, Eigen::VectorXd &adj_sol) {
-  // Compute Space Information
-  Dims dims_d, dims_n;
-  Indices ind_d, ind_n;
-  ComputeDirSpaceInfo(mesh, space_d, dir_sel, dims_d, ind_d);
-  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
-
   // Get Galerkin matrices
   Eigen::MatrixXd M = parametricbem2d::MassMatrix(
                           mesh, space_n, space_d, order);
@@ -134,18 +129,14 @@ double ComputeShapeDerivative(
     const parametricbem2d::ParametrizedMesh &mesh,
     const parametricbem2d::AbstractBEMSpace &space_d,
     const parametricbem2d::AbstractBEMSpace &space_n,
+    const Dims &dims_d, const Dims &dims_n,
+    const Indices &ind_d, const Indices &ind_n,
     const AbstractVelocityField &nu,
-    std::function<bool(Eigen::Vector2d)> dir_sel,
     const DirData &g, const NeuData &eta,
     double epsilon1, double epsilon2,
     const Eigen::VectorXd &state_sol,
     const Eigen::VectorXd &adj_sol,
     unsigned order) {
-  // Compute Space Information
-  Dims dims_d, dims_n;
-  Indices ind_d, ind_n;
-  ComputeDirSpaceInfo(mesh, space_d, dir_sel, dims_d, ind_d);
-  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
   Eigen::VectorXd g_interp = InterpolateDirData(mesh,
       [&](Eigen::VectorXd x) { return g(x); }, space_d, ind_d);
   Eigen::VectorXd eta_interp = InterpolateNeuData(mesh,
@@ -278,6 +269,85 @@ double ComputeShapeDerivative(
   return res;
 }
 
+Eigen::Vector2d EvaluateStressTensor(
+    const parametricbem2d::ParametrizedMesh &mesh,
+    const parametricbem2d::AbstractBEMSpace &space_d,
+    const parametricbem2d::AbstractBEMSpace &space_n,
+    const Dims &dims_d, const Dims &dims_n,
+    const Indices &ind_d, const Indices &ind_n,
+    double epsilon1, double epsilon2,
+    const Eigen::VectorXd &sol, unsigned order) {
+  parametricbem2d::PanelVector panels = mesh.getPanels();
+  unsigned Q_d = space_d.getQ();
+  unsigned Q_n = space_n.getQ();
+  unsigned numpanels_i = mesh.getSplit();
+  QuadRule GaussQR = getGaussQR(order);
+  unsigned N = GaussQR.n;
+  Eigen::MatrixXd mat_d_x = Eigen::MatrixXd::Zero(dims_d.all, dims_d.all);
+  Eigen::MatrixXd mat_d_y = Eigen::MatrixXd::Zero(dims_d.all, dims_d.all);
+  Eigen::MatrixXd mat_n_x = Eigen::MatrixXd::Zero(dims_n.all, dims_n.all);
+  Eigen::MatrixXd mat_n_y = Eigen::MatrixXd::Zero(dims_n.all, dims_n.all);
+
+  for (unsigned i = 0; i < numpanels_i; ++i) {
+    parametricbem2d::AbstractParametrizedCurve &pi = *panels[i];
+
+    for (unsigned I = 0; I < Q_d; ++I) {
+      for (unsigned J = 0; J < Q_d; ++J) {
+        auto integrand = [&](double s) -> Eigen::Vector2d {
+          Eigen::Vector2d tangent = pi.Derivative(s);
+          Eigen::Vector2d normal(tangent(1), -tangent(0));
+          normal /= normal.norm();
+          return space_d.evaluateShapeFunctionDot(I, s) *
+                 space_d.evaluateShapeFunctionDot(J, s) *
+                 normal / tangent.norm();
+        };
+        Eigen::Vector2d integral = Eigen::Vector2d::Zero();
+        for (unsigned k = 0; k < N; ++k) {
+          integral += GaussQR.w(k) * integrand(GaussQR.x(k));
+        } 
+        unsigned II = space_d.LocGlobMap2(I + 1, i + 1, mesh) - 1;
+        unsigned JJ = space_d.LocGlobMap2(J + 1, i + 1, mesh) - 1;
+        mat_d_x(II, JJ) += integral[0];
+        mat_d_y(II, JJ) += integral[1];
+      }
+    }
+
+    for (unsigned I = 0; I < Q_n; ++I) {
+      for (unsigned J = 0; J < Q_n; ++J) {
+        auto integrand = [&](double s) -> Eigen::Vector2d {
+          Eigen::Vector2d tangent = pi.Derivative(s);
+          Eigen::Vector2d normal(tangent(1), -tangent(0));
+          normal /= normal.norm();
+          return space_n.evaluateShapeFunction(I, s) *
+                 space_n.evaluateShapeFunction(J, s) *
+                 normal * tangent.norm();
+        };
+        Eigen::Vector2d integral = Eigen::Vector2d::Zero();
+        for (unsigned k = 0; k < N; ++k) {
+          integral += GaussQR.w(k) * integrand(GaussQR.x(k));
+        } 
+        unsigned II = space_n.LocGlobMap2(I + 1, i + 1, mesh) - 1;
+        unsigned JJ = space_n.LocGlobMap2(J + 1, i + 1, mesh) - 1;
+        mat_n_x(II, JJ) += integral[0];
+        mat_n_y(II, JJ) += integral[1];
+      }
+    }
+  }
+
+  Eigen::VectorXd u_i = sol.segment(0, dims_d.i);
+  Eigen::VectorXd psi_i = sol.segment(dims_d.i, dims_n.i);
+
+  Eigen::Vector2d force;
+  force[0] = u_i.dot(Slice(mat_d_x, ind_d.i, ind_d.i) * u_i) +
+             epsilon2 / epsilon1 *
+                 psi_i.dot(Slice(mat_n_x, ind_n.i, ind_n.i) * psi_i);
+  force[1] = u_i.dot(Slice(mat_d_y, ind_d.i, ind_d.i) * u_i) +
+             epsilon2 / epsilon1 *
+                 psi_i.dot(Slice(mat_n_y, ind_n.i, ind_n.i) * psi_i);
+  force *= 0.5 * (epsilon1 - epsilon2);
+  return force;
+}
+
 // Compute net force
 Eigen::Vector2d CalculateForce(
     const parametricbem2d::ParametrizedMesh &mesh,
@@ -288,10 +358,16 @@ Eigen::Vector2d CalculateForce(
     const DirData &g, const NeuData &eta,
     double epsilon1, double epsilon2, unsigned order,
     std::ofstream &out) {
+  // Compute Space Information
+  Dims dims_d, dims_n;
+  Indices ind_d, ind_n;
+  ComputeDirSpaceInfo(mesh, space_d, dir_sel, dims_d, ind_d);
+  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
+
   // Get state and adjoint solution
   Eigen::VectorXd state_sol, adj_sol;
   SolveStateAndAdjoint(
-      mesh, space_d, space_n, dir_sel,
+      mesh, space_d, space_n, dims_d, dims_n, ind_d, ind_n,
       [&](Eigen::VectorXd x) { return g(x); },
       [&](Eigen::VectorXd x) { return eta(x); },
       epsilon1, epsilon2, order, state_sol, adj_sol);
@@ -299,16 +375,26 @@ Eigen::Vector2d CalculateForce(
   // Reuse state & adjoint solution for net force computation
   NuConstant nu_x(Eigen::Vector2d(1., 0.), bdry_sel);
   NuConstant nu_y(Eigen::Vector2d(0., 1.), bdry_sel);
-  double Fx = ComputeShapeDerivative(mesh, space_d, space_n, nu_x, dir_sel,
-      g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
-  double Fy = ComputeShapeDerivative(mesh, space_d, space_n, nu_y, dir_sel,
-      g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
+  double Fx = ComputeShapeDerivative(
+      mesh, space_d, space_n, dims_d, dims_n, ind_d, ind_n,
+      nu_x, g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
+  double Fy = ComputeShapeDerivative(
+      mesh, space_d, space_n, dims_d, dims_n, ind_d, ind_n,
+      nu_y, g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
 
-  std::cout << std::setw(25) << Fx
-              << std::setw(25) << Fy << std::endl;
+  // Boundary-based formula
+  Eigen::Vector2d F2 = EvaluateStressTensor(mesh, space_d, space_n,
+      dims_d, dims_n, ind_d, ind_n, epsilon1, epsilon2, state_sol, order);
 
-  out << std::setw(25) << Fx
-      << std::setw(25) << Fy << std::endl;
+  std::cout << std::setw(50) << Fx
+            << std::setw(25) << Fy
+            << std::setw(50) << F2[0]
+            << std::setw(25) << F2[1] << std::endl;
+
+  out << std::setw(50) << Fx
+      << std::setw(25) << Fy 
+      << std::setw(50) << F2[0]
+      << std::setw(25) << F2[1] << std::endl;
 
   return Eigen::Vector2d(Fx, Fy);
 }
@@ -318,21 +404,27 @@ double CalculateForce(
     const parametricbem2d::ParametrizedMesh &mesh,
     const parametricbem2d::AbstractBEMSpace &space_d,
     const parametricbem2d::AbstractBEMSpace &space_n,
-    std::function<bool(Eigen::Vector2d)> bdry_sel,
     std::function<bool(Eigen::Vector2d)> dir_sel,
     const DirData &g, const NeuData &eta,
     double epsilon1, double epsilon2, unsigned order,
     const AbstractVelocityField &nu) {
+  // Compute Space Information
+  Dims dims_d, dims_n;
+  Indices ind_d, ind_n;
+  ComputeDirSpaceInfo(mesh, space_d, dir_sel, dims_d, ind_d);
+  ComputeNeuSpaceInfo(mesh, space_n, dir_sel, dims_n, ind_n);
+
   // Get state and adjoint solution
   Eigen::VectorXd state_sol, adj_sol;
   SolveStateAndAdjoint(
-      mesh, space_d, space_n, dir_sel,
+      mesh, space_d, space_n, dims_d, dims_n, ind_d, ind_n,
       [&](Eigen::VectorXd x) { return g(x); },
       [&](Eigen::VectorXd x) { return eta(x); },
       epsilon1, epsilon2, order, state_sol, adj_sol);
 
-  double force = ComputeShapeDerivative(mesh, space_d, space_n, nu, dir_sel,
-        g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
+  double force = ComputeShapeDerivative(
+      mesh, space_d, space_n, dims_d, dims_n, ind_d, ind_n,
+      nu, g, eta, epsilon1, epsilon2, state_sol, adj_sol, order);
 
   //std::cout << "force = " << force << std::endl;
   return force;

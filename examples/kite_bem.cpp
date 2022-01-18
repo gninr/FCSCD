@@ -94,6 +94,10 @@ int main() {
   std::cout << "epsilon2: " << epsilon2 << std::endl;
   std::cout << "------------------------------------" << std::endl;
   std::cout << std::setw(10) << "1/h"
+            << std::setw(25) << "Pullback"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy"
+            << std::setw(25) << "Stress Tensor"
             << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
@@ -103,11 +107,15 @@ int main() {
   out << "epsilon2: " << epsilon2 << std::endl;
   out << "------------------------------------" << std::endl;
   out << std::setw(10) << "1/h"
+      << std::setw(25) << "Pullback"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy"
+      << std::setw(25) << "Stress Tensor"
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
   // numpanels = Number of panels per unit
-  for (unsigned numpanels = 4; numpanels <= 512; numpanels *= 2) {
+  for (unsigned numpanels = 4; numpanels <= 256; numpanels *= 2) {
     unsigned temp = numpanels;
 
     parametricbem2d::PanelVector panels_kite;
