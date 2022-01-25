@@ -12,17 +12,27 @@
 #include "parametrized_mesh.hpp"
 #include <Eigen/Dense>
 
-int main() {
+int main(int argc, char *argv[]) {
+  double epsilon1 = 1.;
+  double epsilon2 = 5.;
+
   std::cout << "Calculate force using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
 
-  std::ofstream out("square_bem.txt");
+  std::string filename;
+  if (argc > 1) {
+    epsilon2 = atof(argv[1]);
+    filename = "square_bem" + std::string(argv[1]) + ".txt";
+  }
+  else {
+    filename = "square_bem5.txt";
+  }
+  
+  std::ofstream out(filename);
   out << "Calculate force using BEM" << std::endl;
   out << "####################################" << std::endl;
   // Gauss quadrature order
   unsigned order = 16;
-
-  double epsilon1 = 1., epsilon2 = 5.;
 
   transmission_bem::G_CONST g([](Eigen::Vector2d x) { return 2. - x[0]; });
 

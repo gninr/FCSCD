@@ -9,13 +9,18 @@ Force computation using shape calculus on dielectrics
 ## Using CMake
 * Create a "build" directory in the project directory. Use "cmake .." from inside the build directory. It is recommended to specify the macro "-DCMAKE_BUILD_TYPE=Release" to compile in release mode for faster runs.
 
-## Building targets for shape derivative
+## Generating square-kite meshes
+* From the build folder, execute "make geom" to compile square-kite geometry generator.
+* Run "./geom level" to generate the geometry with desired level of refinement.
+* Open the generated geometry files in Gmsh to build meshes. Save meshes to build/examples/meshes folder.
+
+## Building targets
 * From the build folder, execute "make target_name" to compile target_name.
-* All the compiled executables lie in the folder build/examples.
-* Use "python plot.py shape_name" to visualize the result. (shape_name = square/kite)
+* All the compiled executables lie in the folder build/examples which can be run by "./target_name eps_2". eps_2 is used to set the relative permittivity since eps_1 = 1 by default.
+* Use "python plot.py shape_name eps_2" to visualize the result. (shape_name = square/kite)
 
 ## Target names for net force
-* For square-shaped D using BEM: square_bem
-* For square-shaped D using FEM: square_fem
-* For kite-shaped D using BEM: kite_bem
-* For kite_shaped D using FEM: kite_fem
+* For square-shaped inner domain using BEM: square_bem
+* For square-shaped inner domain using FEM: square_fem
+* For kite-shaped inner domain using BEM: kite_bem
+* For kite_shaped inner domain using FEM: kite_fem

@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   std::cout << "Calculate force using BEM" << std::endl;
   std::cout << "####################################" << std::endl;
 
-  std::ofstream out("bem_test.txt");
+  std::ofstream out("force_bem.txt");
   out << "Calculate force using BEM" << std::endl;
   out << "####################################" << std::endl;
 
@@ -133,6 +133,22 @@ int main(int argc, char *argv[]) {
 
   parametricbem2d::ContinuousSpace<1> space_d;
   parametricbem2d::DiscontinuousSpace<0> space_n;
+
+  std::cout << "------------------------------------" << std::endl;
+  std::cout << std::setw(25) << "Pullback"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy"
+            << std::setw(25) << "Stress Tensor"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy" << std::endl;
+
+  out << "------------------------------------" << std::endl;
+  out << std::setw(25) << "Pullback"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy"
+      << std::setw(25) << "Stress Tensor"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy" << std::endl;
 
   Eigen::Vector2d force = transmission_bem::CalculateForce(mesh, space_d,
       space_n, bdry_sel, dir_sel, g, eta, epsilon1, epsilon2, order, out);

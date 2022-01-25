@@ -4,54 +4,34 @@
 #include <iomanip>
 #include <iostream>
 #include <math.h>
+#include <string>
 
 #include <lf/fe/fe.h>
 #include <lf/io/io.h>
 #include <lf/mesh/hybrid2d/hybrid2d.h>
 #include <lf/uscalfe/uscalfe.h>
 
-int main() {
+int main(int argc, char *argv[]) {
   using size_type = lf::base::size_type;
   
+  double epsilon1 = 1.;
+  double epsilon2 = 5.;
+
   std::cout << "Calculate force using FEM" << std::endl;
   std::cout << "####################################" << std::endl;
 
-  std::ofstream out("kite_fem.txt");
+  std::string filename;
+  if (argc > 1) {
+    epsilon2 = atof(argv[1]);
+    filename = "kite_fem" + std::string(argv[1]) + ".txt";
+  }
+  else {
+    filename = "kite_fem5.txt";
+  }
+  
+  std::ofstream out(filename);
   out << "Calculate force using FEM" << std::endl;
   out << "####################################" << std::endl;
-
-  // Determine whether a point belongs to inner area
-  // x = 0.35 * cos(t) + 0.1625 * cos(2*t)
-  // y = 0.35 * sin(t)
-  auto inner = [](Eigen::Vector2d X) {
-    double x = X[0] - 0.3, y = X[1] - 0.5;
-    if (y > 0.35 || y < -0.35) return false;
-
-    if (x > -0.1625) {
-      double t = asin(y / 0.35);
-      double x_max = 0.35 * cos(t) + 0.1625 * cos(2 * t);
-      if (x > x_max) return false;
-      else return true;
-    }
-    else {
-      double t = M_PI - asin(y / 0.35);
-      double x_min = 0.35 * cos(t) + 0.1625 * cos(2 * t);
-      if (x < x_min) return false;
-      else return true;
-    }
-  };
-
-  double epsilon1 = 1.;
-  double epsilon2 = 5.;
-  auto epsilon = [&](Eigen::Vector2d x) {
-    Eigen::Matrix2d A;
-    if (inner(x)) {
-      A = epsilon1 * Eigen::Matrix2d::Identity();
-    } else {
-      A = epsilon2 * Eigen::Matrix2d::Identity();
-    }
-    return A;
-  };
 
   auto g = [](Eigen::Vector2d x) {
     return 2. - x[0];
@@ -87,6 +67,9 @@ int main() {
   std::cout << std::setw(10) << "1/h"
             << std::setw(25) << "Volume Formula"
             << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy" 
+            << std::setw(25) << "Stress Tensor"
+            << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
   out << "shape of inner dielectic: kite" << std::endl;
@@ -96,19 +79,36 @@ int main() {
   out << std::setw(10) << "1/h"
       << std::setw(25) << "Volume Formula"
       << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy" 
+      << std::setw(25) << "Stress Tensor"
+      << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
   
   std::shared_ptr<const lf::mesh::Mesh> mesh_p;
 
   for (int level = 4; level <= 9; ++level) {
     // Load mesh
-    std::string mesh_file = "../../examples/meshes/kite_sq" + 
+    std::string mesh_file = "meshes/kite_sq" + 
                             std::to_string(level) + ".msh";
     auto mesh_factory = std::make_unique<lf::mesh::hybrid2d::MeshFactory>(2);
     const lf::io::GmshReader reader(std::move(mesh_factory), mesh_file);
     mesh_p = reader.mesh();
     auto fe_space =
         std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
+    
+    // Determine whether an edge belongs to inner boundary
+    auto inner_bdry_nr = reader.PhysicalEntityName2Nr("Inner boundary");
+    auto inner_bdry_sel = [&](const lf::mesh::Entity &e) {
+      assert(e.RefEl() == lf::base::RefEl::kSegment());
+      return reader.IsPhysicalEntity(e, inner_bdry_nr);
+    };
+
+    // Determine whether a point belongs to inner area
+    auto inner_nr = reader.PhysicalEntityName2Nr("Inner domain");
+    auto inner_sel = [&](const lf::mesh::Entity &e) {
+      assert(e.RefEl() == lf::base::RefEl::kTria());
+      return reader.IsPhysicalEntity(e, inner_nr);
+    };
 
     std::cout.precision(std::numeric_limits<double>::digits10);
     std::cout << std::setw(10) << (1 << (level-2));
@@ -116,8 +116,9 @@ int main() {
     out.precision(std::numeric_limits<double>::digits10);
     out << std::setw(10) << (1 << (level-2));
     
-    Eigen::Vector2d force = transmission_fem::CalculateForce(
-        fe_space, dir_sel, g, eta, epsilon, grad_w, out);
+    Eigen::Vector2d force =
+        transmission_fem::CalculateForce(fe_space, dir_sel, inner_bdry_sel,
+            inner_sel, g, eta, epsilon1, epsilon2, grad_w, out);
   }
 
   return 0;

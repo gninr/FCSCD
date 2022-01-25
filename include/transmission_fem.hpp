@@ -9,12 +9,35 @@
 #include <lf/uscalfe/uscalfe.h>
 
 namespace transmission_fem {
+
+class MeshFunctionPWConstant {
+  using POSPRED = std::function<bool(const lf::mesh::Entity&)>;
+public:
+  MeshFunctionPWConstant(double epsilon1, double epsilon2, POSPRED inner_sel) :
+      epsilon1_(epsilon1), epsilon2_(epsilon2), inner_sel_(inner_sel) {}
+
+  std::vector<double> operator()(const lf::mesh::Entity& e,
+                                 const Eigen::MatrixXd& local) const {
+    std::vector<double> res;
+    res.reserve(local.cols());
+    double eps = inner_sel_(e) ? epsilon1_ : epsilon2_;
+    for (unsigned i = 0; i < local.cols(); ++i) {
+      res.push_back(eps);
+    }
+    return res;
+  }
+private:
+  double epsilon1_, epsilon2_;
+  POSPRED inner_sel_;
+};
+
 Eigen::VectorXd Solve(
     std::shared_ptr<lf::uscalfe::UniformScalarFESpace<double>> fe_space,
     std::function<bool(Eigen::Vector2d)> dir_sel,
+    std::function<bool(const lf::mesh::Entity&)> inner_sel,
     std::function<double(Eigen::Vector2d)> g,
     std::function<double(Eigen::Vector2d)> eta,
-    std::function<Eigen::Matrix2d(Eigen::Vector2d)> epsilon) {
+    double epsilon1, double epsilon2) {
 
   using size_type = lf::base::size_type;
   using glb_idx_t = lf::assemble::glb_idx_t;
@@ -24,7 +47,7 @@ Eigen::VectorXd Solve(
   lf::mesh::utils::MeshFunctionGlobal mf_eta{eta};
 
   // Coefficient
-  lf::mesh::utils::MeshFunctionGlobal mf_epsilon{epsilon};
+  MeshFunctionPWConstant mf_epsilon{epsilon1, epsilon2, inner_sel};
   lf::mesh::utils::MeshFunctionConstant<double> mf_zero{0.};
   
   // Selectors for boundary conditions

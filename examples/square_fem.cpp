@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <math.h>
+#include <string>
 
 #include <lf/geometry/geometry.h>
 #include <lf/fe/fe.h>
@@ -11,27 +12,27 @@
 #include <lf/refinement/refinement.h>
 #include <lf/uscalfe/uscalfe.h>
 
-int main() {
+int main(int argc, char *argv[]) {
   using size_type = lf::base::size_type;
   
+  double epsilon1 = 1.;
+  double epsilon2 = 5.;
+
   std::cout << "Calculate force using FEM" << std::endl;
   std::cout << "####################################" << std::endl;
 
-  std::ofstream out("square_fem.txt");
+  std::string filename;
+  if (argc > 1) {
+    epsilon2 = atof(argv[1]);
+    filename = "square_fem" + std::string(argv[1]) + ".txt";
+  }
+  else {
+    filename = "square_fem5.txt";
+  }
+  
+  std::ofstream out(filename);
   out << "Calculate force using FEM" << std::endl;
   out << "####################################" << std::endl;
-
-  double epsilon1 = 1.;
-  double epsilon2 = 5.;
-  auto epsilon = [&](Eigen::Vector2d x) {
-    Eigen::Matrix2d A;
-    if (x[0] >= 0. && x[0] <= 1. && x[1] >= 0. && x[1] <= 1.) {
-      A = epsilon1 * Eigen::Matrix2d::Identity();
-    } else {
-      A = epsilon2 * Eigen::Matrix2d::Identity();
-    }
-    return A;
-  };
 
   auto g = [](Eigen::Vector2d x) {
     return 2. - x[0];
@@ -43,6 +44,29 @@ int main() {
 
   auto dir_sel = [](Eigen::Vector2d x) {
     return (x[0] - 2. > -1e-7 || x[0] + 2. < 1e-7);
+  };
+
+  auto inner_bdry_sel = [](const lf::mesh::Entity &e) {
+    assert(e.RefEl() == lf::base::RefEl::kSegment());
+    Eigen::MatrixXd corners = lf::geometry::Corners(*(e.Geometry()));
+    Eigen::Vector2d x1, x2;
+    x1 = corners.col(0);
+    x2 = corners.col(1);
+    auto on_bdry = [](Eigen::Vector2d x) {
+      return ((fabs(x[0]) < 1e-7 || fabs(x[0] - 1.) < 1e-7) &&
+                    x[1] > -1e-7 && x[1] - 1. < 1e-7) ||
+             ((fabs(x[1]) < 1e-7 || fabs(x[1] - 1.) < 1e-7) &&
+                    x[0] > -1e-7 && x[0] - 1. < 1e-7);
+    };
+    return on_bdry(x1) && on_bdry(x2) &&
+           (fabs(x1[0] - x2[0]) < 1e-7 || fabs(x1[1] - x2[1]) < 1e-7);
+  };
+
+  auto inner_sel = [](const lf::mesh::Entity& e) {
+    assert(e.RefEl() == lf::base::RefEl::kTria());
+    Eigen::MatrixXd center = Eigen::MatrixXd::Ones(2, 1) * 0.5;
+    Eigen::Vector2d x = e.Geometry()->Global(center).col(0);
+    return (x[0] >= 0. && x[0] <= 1. && x[1] >= 0. && x[1] <= 1.);
   };
 
   double r_in = 1.5;
@@ -92,6 +116,9 @@ int main() {
   std::cout << std::setw(10) << "1/h"
             << std::setw(25) << "Volume Formula"
             << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy" 
+            << std::setw(25) << "Stress Tensor"
+            << std::setw(25) << "Fx"
             << std::setw(25) << "Fy" << std::endl;
 
   out << "shape of inner dielectic: square" << std::endl;
@@ -100,6 +127,9 @@ int main() {
   out << "------------------------------------" << std::endl;
   out << std::setw(10) << "1/h"
       << std::setw(25) << "Volume Formula"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy" 
+      << std::setw(25) << "Stress Tensor"
       << std::setw(25) << "Fx"
       << std::setw(25) << "Fy" << std::endl;
 
@@ -114,8 +144,9 @@ int main() {
     out.precision(std::numeric_limits<double>::digits10);
     out << std::setw(10) << (1 << (level-2));
 
-    Eigen::Vector2d force = transmission_fem::CalculateForce(
-        fe_space, dir_sel, g, eta, epsilon, grad_w, out);
+    Eigen::Vector2d force =
+        transmission_fem::CalculateForce(fe_space, dir_sel, inner_bdry_sel,
+            inner_sel, g, eta, epsilon1, epsilon2, grad_w, out);
   }
 
   return 0;

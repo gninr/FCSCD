@@ -9,27 +9,34 @@
 #include <lf/refinement/refinement.h>
 #include <lf/uscalfe/uscalfe.h>
 
-int main() {
+int main(int argc, char *argv[]) {
   using size_type = lf::base::size_type;
   
   std::cout << "Calculate force using FEM" << std::endl;
   std::cout << "####################################" << std::endl;
   
-  std::ofstream out("fem_test.txt");
+  std::ofstream out("force_fem.txt");
   out << "Calculate force using FEM" << std::endl;
   out << "####################################" << std::endl;
 
+  std::cout << "------------------------------------" << std::endl;
+  std::cout << std::setw(25) << "Volume Formula"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy" 
+            << std::setw(25) << "Stress Tensor"
+            << std::setw(25) << "Fx"
+            << std::setw(25) << "Fy" << std::endl;
+
+  out << "------------------------------------" << std::endl;
+  out << std::setw(25) << "Volume Formula"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy" 
+      << std::setw(25) << "Stress Tensor"
+      << std::setw(25) << "Fx"
+      << std::setw(25) << "Fy" << std::endl;
+
   double epsilon1 = 1.;
   double epsilon2 = 100.;
-  auto epsilon = [&](Eigen::Vector2d x) {
-    Eigen::Matrix2d A;
-    if (x[0] >= -1. && x[0] <= 1. && x[1] >= -1. && x[1] <= 1.) {
-      A = epsilon1 * Eigen::Matrix2d::Identity();
-    } else {
-      A = epsilon2 * Eigen::Matrix2d::Identity();
-    }
-    return A;
-  };
 
   auto g = [](Eigen::Vector2d x) {
     return 2. - x[0];
@@ -85,8 +92,68 @@ int main() {
   auto fe_space =
       std::make_shared<lf::uscalfe::FeSpaceLagrangeO1<double>>(mesh_p);
 
-  Eigen::Vector2d force = transmission_fem::CalculateForce(
-      fe_space, dir_sel, g, eta, epsilon, grad_w, out);
+  Eigen::Vector2d force;
+
+  if (argv[1] == std::string("0")) {
+    std::cout << "Square without symmetry" << std::endl;
+
+    auto inner_bdry_sel = [](const lf::mesh::Entity &e) {
+      assert(e.RefEl() == lf::base::RefEl::kSegment());
+      Eigen::MatrixXd corners = lf::geometry::Corners(*(e.Geometry()));
+      Eigen::Vector2d x1, x2;
+      x1 = corners.col(0);
+      x2 = corners.col(1);
+      auto on_bdry = [](Eigen::Vector2d x) {
+        return ((fabs(x[0]) < 1e-7 || fabs(x[0] - 0.5) < 1e-7) &&
+                      x[1] > -1e-7 && x[1] - 0.5 < 1e-7) ||
+              ((fabs(x[1]) < 1e-7 || fabs(x[1] - 0.5) < 1e-7) &&
+                      x[0] > -1e-7 && x[0] - 0.5 < 1e-7);
+      };
+      return on_bdry(x1) && on_bdry(x2) &&
+            (fabs(x1[0] - x2[0]) < 1e-7 || fabs(x1[1] - x2[1]) < 1e-7);
+    };
+
+    auto inner_sel = [](const lf::mesh::Entity& e) {
+      assert(e.RefEl() == lf::base::RefEl::kTria());
+      Eigen::MatrixXd center = Eigen::MatrixXd::Ones(2, 1) * 0.5;
+      Eigen::Vector2d x = e.Geometry()->Global(center).col(0);
+      return (x[0] >= 0. && x[0] <= 0.5 && x[1] >= 0. && x[1] <= 0.5);
+    };
+
+    force = transmission_fem::CalculateForce(fe_space, dir_sel, inner_bdry_sel,
+                inner_sel, g, eta, epsilon1, epsilon2, grad_w, out);
+  }
+
+  else if (argv[1] == std::string("1")) {
+    std::cout << "Square symmetric about origin" << std::endl;
+
+    auto inner_bdry_sel = [](const lf::mesh::Entity &e) {
+      assert(e.RefEl() == lf::base::RefEl::kSegment());
+      Eigen::MatrixXd corners = lf::geometry::Corners(*(e.Geometry()));
+      Eigen::Vector2d x1, x2;
+      x1 = corners.col(0);
+      x2 = corners.col(1);
+      auto on_bdry = [](Eigen::Vector2d x) {
+        return ((fabs(x[0] + 0.5) < 1e-7 || fabs(x[0] - 0.5) < 1e-7) &&
+                      x[1] + 0.5 > -1e-7 && x[1] - 0.5 < 1e-7) ||
+               ((fabs(x[1] + 0.5) < 1e-7 || fabs(x[1] - 0.5) < 1e-7) &&
+                      x[0] + 0.5 > -1e-7 && x[0] - 0.5 < 1e-7);
+      };
+      return on_bdry(x1) && on_bdry(x2) &&
+            (fabs(x1[0] - x2[0]) < 1e-7 || fabs(x1[1] - x2[1]) < 1e-7);
+    };
+
+    auto inner_sel = [](const lf::mesh::Entity& e) {
+      assert(e.RefEl() == lf::base::RefEl::kTria());
+      Eigen::MatrixXd center = Eigen::MatrixXd::Ones(2, 1) * 0.5;
+      Eigen::Vector2d x = e.Geometry()->Global(center).col(0);
+      return (x[0] >= -0.5 && x[0] <= 0.5 && x[1] >= -0.5 && x[1] <= 0.5);
+    };
+
+    force = transmission_fem::CalculateForce(fe_space, dir_sel, inner_bdry_sel,
+                inner_sel, g, eta, epsilon1, epsilon2, grad_w, out);
+  }
+
 
   return 0;
 }
