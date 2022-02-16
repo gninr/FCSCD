@@ -85,17 +85,17 @@ if __name__ == '__main__':
   ax.loglog(h_fem, h_fem**fit_fem_bdry[0] * np.exp(fit_fem_bdry[1]),
             color='silver', linestyle='--')
   ax.loglog(h_bem, error_bem, 'o-',
-            label='Pullback approach (BEM)' + r' $\alpha$ = ' + f'{fit_bem[0]:.3}')
+            label='Pullback approach (BEM)')
   ax.loglog(h_bem, error_bem_bdry, 'o-',
-            label='Stress tensor (BEM)' + r' $\alpha$ = ' + f'{fit_bem_bdry[0]:.3}')
+            label='Stress tensor (BEM)')
   ax.loglog(h_fem, error_fem, 'o-',
-            label='Volume formula (FEM)' + r' $\alpha$ = ' + f'{fit_fem[0]:.3}')
+            label='Volume formula (FEM)')
   ax.loglog(h_fem, error_fem_bdry, 'o-',
-            label='Stress tensor (FEM)' + r' $\alpha$ = ' + f'{fit_fem_bdry[0]:.3}')
+            label='Stress tensor (FEM)')
 
   ax.set_xlabel('h')
   ax.set_ylabel('Relative error')
-  ax.set_title(shape + '-shaped D' + r', $\epsilon_2$ = ' + eps_2)
-  ax.legend()
+  #ax.set_title(shape.capitalize() + '-shaped ' + r'$\Omega_1$')
+  ax.legend(loc='lower right')
   plt.savefig(shape + eps_2 + '_result.png', dpi=300)
   plt.show()
